@@ -11,14 +11,20 @@ from app.crawler.parser import extrair_links
 from app.validators.base import ResultadoCriterio, StatusValidacao
 
 
+_TIMEOUT_LINK = 8  # segundos por link — curto para não bloquear a avaliação
+
+
 def validar_links_quebrados(
-    html: str, url_base: str, modulo: str = "", max_links: int = 30, timeout: int = REQUEST_TIMEOUT
+    html: str, url_base: str, modulo: str = "", max_links: int = 30, timeout: int = _TIMEOUT_LINK
 ) -> ResultadoCriterio:
     """Verifica se há links quebrados (status HTTP 4xx/5xx).
 
     Limita a verificação a max_links links para não sobrecarregar.
     O parâmetro timeout controla o tempo máximo de espera por link (segundos).
+    Links inacessíveis (timeout ou erro de conexão) são registrados como evidência
+    mas não interrompem a avaliação do módulo.
     """
+    _timeout_efetivo = min(timeout, _TIMEOUT_LINK) if timeout > _TIMEOUT_LINK else timeout
     links = extrair_links(html, url_base)[:max_links]
     quebrados: list[str] = []
     verificados = 0
@@ -29,13 +35,16 @@ def validar_links_quebrados(
             continue
         try:
             resp = requests.head(
-                href, headers=REQUEST_HEADERS, timeout=timeout, allow_redirects=True
+                href, headers=REQUEST_HEADERS, timeout=_timeout_efetivo, allow_redirects=True
             )
             if resp.status_code >= 400:
                 quebrados.append(f"{href} (HTTP {resp.status_code})")
             verificados += 1
+        except requests.exceptions.Timeout:
+            quebrados.append(f"{href} (inacessível — timeout)")
+            verificados += 1
         except requests.exceptions.RequestException:
-            quebrados.append(f"{href} (erro de conexão)")
+            quebrados.append(f"{href} (inacessível — erro de conexão)")
             verificados += 1
 
     if not verificados:

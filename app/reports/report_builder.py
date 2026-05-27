@@ -189,6 +189,17 @@ def auditar_orgao(
                     html_pagina, url_pagina, modulo=modulo, timeout=timeout_pagina
                 )
                 resultados_modulo.append(r_links)
+            elif not verificar_links and validacoes.get("verificar_links_quebrados"):
+                resultados_modulo.append(
+                    ResultadoCriterio(
+                        criterio_id="links_quebrados",
+                        descricao="Ausência de links quebrados na página",
+                        status=StatusValidacao.NAO_VERIFICADO,
+                        evidencia="Verificação de links desativada pelo usuário.",
+                        url=url_pagina or url,
+                        modulo=modulo,
+                    )
+                )
 
             # 7. Validar legislação oficial
             dominios_oficiais = validacoes.get("dominio_legislacao_oficial")
