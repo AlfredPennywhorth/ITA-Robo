@@ -589,6 +589,49 @@ HTML_MENU_GRANDE = """
 </html>
 """
 
+HTML_ACESSO_INTERNO_E_EXTERNO = """
+<html>
+<body>
+  <nav>
+    <a href="http://transparencia.prefeitura.sp.gov.br/sistema-eletronico-de-informacao-ao-cidadao-e-sic/">
+      Acesso à Informação
+    </a>
+    <a href="/acesso-a-informacao.aspx">Acesso à Informação</a>
+  </nav>
+</body>
+</html>
+"""
+
+HTML_ACESSO_APENAS_EXTERNO = """
+<html>
+<body>
+  <nav>
+    <a href="http://transparencia.prefeitura.sp.gov.br/sistema-eletronico-de-informacao-ao-cidadao-e-sic/">
+      Acesso à Informação
+    </a>
+  </nav>
+</body>
+</html>
+"""
+
+HTML_QUADRO_INTERNO = """
+<html>
+<body>
+  <a class="btn" href="/quadro-de-servicos">Quadro de Serviços</a>
+</body>
+</html>
+"""
+
+HTML_PARTICIPACAO_INTERNO = """
+<html>
+<body>
+  <div class="card">
+    <a href="/participacao-social">Participação Social</a>
+  </div>
+</body>
+</html>
+"""
+
 
 class TestAjustesConfiabilidade:
     """Testa os ajustes de confiabilidade para piloto controlado."""
@@ -689,3 +732,53 @@ class TestAjustesConfiabilidade:
         r = ResultadoCriterio("z", "Desc", status=StatusValidacao.CONFORME)
         assert r.requer_revisao_humana is False
         assert r.to_dict()["requer_revisao_humana"] is False
+
+
+class TestSelecaoUrlPrincipalModulo:
+    def test_acesso_informacao_prefere_link_interno(self):
+        from app.reports.report_builder import selecionar_url_principal_modulo
+
+        selecao = selecionar_url_principal_modulo(
+            HTML_ACESSO_INTERNO_E_EXTERNO,
+            URL_BASE,
+            "acesso_informacao",
+            "Acesso à Informação",
+        )
+        assert selecao["url"] == "https://www.prefeitura.sp.gov.br/acesso-a-informacao.aspx"
+        assert selecao["externos_ignorados"]
+
+    def test_acesso_informacao_apenas_externo_nao_verificado(self):
+        from app.reports.report_builder import selecionar_url_principal_modulo
+        from app.validators.base import StatusValidacao
+
+        selecao = selecionar_url_principal_modulo(
+            HTML_ACESSO_APENAS_EXTERNO,
+            URL_BASE,
+            "acesso_informacao",
+            "Acesso à Informação",
+        )
+        assert selecao["url"] is None
+        assert selecao["status"] == StatusValidacao.NAO_VERIFICADO.value
+        assert "apenas referências externas" in selecao["motivo"].lower()
+
+    def test_quadro_servicos_escolhe_link_interno(self):
+        from app.reports.report_builder import selecionar_url_principal_modulo
+
+        selecao = selecionar_url_principal_modulo(
+            HTML_QUADRO_INTERNO,
+            URL_BASE,
+            "quadro_servicos",
+            "Quadro de Serviços",
+        )
+        assert selecao["url"] == "https://www.prefeitura.sp.gov.br/quadro-de-servicos"
+
+    def test_participacao_social_escolhe_link_interno(self):
+        from app.reports.report_builder import selecionar_url_principal_modulo
+
+        selecao = selecionar_url_principal_modulo(
+            HTML_PARTICIPACAO_INTERNO,
+            URL_BASE,
+            "participacao_social",
+            "Participação Social",
+        )
+        assert selecao["url"] == "https://www.prefeitura.sp.gov.br/participacao-social"
