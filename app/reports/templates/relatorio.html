@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Relatório ITA-Robô — {{ nome_orgao }}</title>
+  <style>
+    :root {
+      --verde: #2e7d32;
+      --amarelo: #f9a825;
+      --vermelho: #c62828;
+      --cinza: #607d8b;
+      --azul: #1565c0;
+      --fundo: #f5f5f5;
+    }
+    body { font-family: Arial, sans-serif; background: var(--fundo); color: #212121; margin: 0; padding: 0; }
+    header { background: var(--azul); color: white; padding: 24px 32px; }
+    header h1 { margin: 0; font-size: 1.6rem; }
+    header p { margin: 4px 0 0; font-size: 0.95rem; opacity: 0.85; }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
+    .meta { background: white; border-radius: 8px; padding: 16px 24px; margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    .meta table { border-collapse: collapse; width: 100%; }
+    .meta td { padding: 6px 12px; font-size: 0.95rem; }
+    .meta td:first-child { font-weight: bold; width: 200px; color: #555; }
+    .pontuacoes { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .card { background: white; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); flex: 1; min-width: 180px; text-align: center; }
+    .card h3 { margin: 0 0 8px; font-size: 0.9rem; color: #555; }
+    .card .nota { font-size: 2rem; font-weight: bold; }
+    .card.geral { border-top: 4px solid var(--azul); }
+    .card.geral .nota { color: var(--azul); }
+    .card.modulo .nota { color: var(--verde); }
+    h2 { color: var(--azul); margin: 24px 0 12px; }
+    .tabela-resultados { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1); font-size: 0.88rem; }
+    .tabela-resultados th { background: var(--azul); color: white; padding: 10px 12px; text-align: left; }
+    .tabela-resultados td { padding: 8px 12px; border-bottom: 1px solid #e0e0e0; }
+    .tabela-resultados tr:last-child td { border-bottom: none; }
+    .tabela-resultados tr:nth-child(even) td { background: #fafafa; }
+    .erros { background: #fff3e0; border-left: 4px solid var(--amarelo); padding: 12px 16px; border-radius: 4px; margin-bottom: 24px; }
+    .erros h3 { margin: 0 0 8px; color: #e65100; }
+    .erros ul { margin: 0; padding-left: 20px; }
+    footer { text-align: center; padding: 24px; color: #999; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔍 ITA-Robô — Relatório de Transparência Ativa</h1>
+    <p>Indicador de Transparência Ativa — Verificação Automatizada</p>
+  </header>
+
+  <main>
+    <div class="meta">
+      <table>
+        <tr><td>Órgão</td><td>{{ nome_orgao }}</td></tr>
+        <tr><td>URL Analisada</td><td><a href="{{ url }}" target="_blank">{{ url }}</a></td></tr>
+        <tr><td>Ano de Referência</td><td>{{ ano_referencia }}</td></tr>
+        <tr><td>Data da Verificação</td><td>{{ data_verificacao }}</td></tr>
+        {% if modulos_avaliados %}
+        <tr><td>Módulos Avaliados</td><td>{{ modulos_avaliados | join(', ') }}</td></tr>
+        {% endif %}
+      </table>
+    </div>
+
+    <div class="pontuacoes">
+      <div class="card geral">
+        <h3>Pontuação Geral</h3>
+        <div class="nota">{{ pontuacao_geral }}</div>
+        <p style="font-size:0.8rem;color:#777;margin:4px 0 0;">Índice Automatizado Preliminar</p>
+      </div>
+      {% for modulo, nota in pontuacoes.items() %}
+      <div class="card modulo">
+        <h3>{{ modulo.replace('_', ' ').title() }}</h3>
+        <div class="nota">{{ nota }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if erros %}
+    <div class="erros">
+      <h3>⚠️ Erros durante a verificação</h3>
+      <ul>
+        {% for erro in erros %}<li>{{ erro }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if urls_visitadas %}
+    <h2>URLs Visitadas</h2>
+    <div class="meta">
+      <table style="width:100%">
+        <tr style="background:#e3f2fd;">
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">URL</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Método de Coleta</th>
+        </tr>
+        {% for url_v in urls_visitadas %}
+        <tr>
+          <td style="padding:6px 12px;word-break:break-all;"><a href="{{ url_v }}" target="_blank">{{ url_v }}</a></td>
+          <td style="padding:6px 12px;">{{ metodos_coleta.get(url_v, '—') }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endif %}
+
+    <h2>Detalhamento por Critério</h2>
+    {{ tabela_html }}
+
+    <p style="margin-top:24px; font-size:0.85rem; color:#777;">
+      <strong>Nota:</strong> Esta é uma avaliação automatizada preliminar. Itens marcados como
+      "NÃO VERIFICADO AUTOMATICAMENTE" requerem revisão humana.
+    </p>
+  </main>
+
+  <footer>
+    ITA-Robô — Verificador Automatizado do Indicador de Transparência Ativa &bull; Gerado em {{ data_verificacao }}
+  </footer>
+</body>
+</html>

@@ -1,0 +1,29 @@
+modulo: participacao_social
+nome: "Participação Social"
+
+pagina_inicial:
+  botoes_obrigatorios:
+    - texto: "Participação Social"
+      obrigatorio: true
+
+pagina_principal:
+  secoes_obrigatorias:
+    - "Conselhos e Órgãos Colegiados"
+    - "Conferências"
+    - "Audiências Públicas"
+    - "Consultas Públicas"
+    - "Eventos e Promoção da Cidadania"
+    - nome: "Fundos Públicos"
+      aliases:
+        - "Fundos Públicos"
+        - "Fundo Público"
+        - "Fundos"
+
+validacoes_gerais:
+  exigir_data_atualizacao: true
+  exigir_repositorio_anos_anteriores: true
+  exigir_formato_aberto_downloads: true
+  verificar_links_quebrados: true
+  dominio_legislacao_oficial:
+    - "legislacao.prefeitura.sp.gov.br"
+    - "www.planalto.gov.br"

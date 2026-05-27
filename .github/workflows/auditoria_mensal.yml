@@ -1,0 +1,88 @@
+name: Auditoria Mensal — ITA-Robô
+
+on:
+  schedule:
+    # Executa todo dia 1 de cada mês às 06:00 UTC
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL do órgão a auditar (opcional, deixe em branco para lote)"
+        required: false
+        default: ""
+      nome_orgao:
+        description: "Nome do órgão (opcional)"
+        required: false
+        default: ""
+
+jobs:
+  auditoria:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Instalar Playwright
+        run: playwright install chromium --with-deps
+
+      - name: Executar auditoria em lote
+        run: |
+          python - <<'EOF'
+          import sys, os, json
+          from datetime import datetime
+          sys.path.insert(0, os.path.dirname(os.path.abspath(".")))
+
+          from app.reports.report_builder import auditar_orgao, construir_dataframe_lote
+          from app.reports.exports import salvar_resultados
+          from app.storage.database import salvar_auditoria
+          import pandas as pd
+
+          url_input = "${{ github.event.inputs.url }}"
+          nome_input = "${{ github.event.inputs.nome_orgao }}"
+
+          if url_input:
+              orgaos = [{"orgao": nome_input or "Órgão avaliado", "url": url_input}]
+          else:
+              df = pd.read_csv("data/orgaos.csv")
+              orgaos = df.to_dict(orient="records")
+
+          auditorias = []
+          for o in orgaos:
+              print(f"Auditando: {o['orgao']} — {o['url']}")
+              auditoria = auditar_orgao(
+                  url=o["url"],
+                  nome_orgao=o["orgao"],
+                  ano_referencia=datetime.now().year,
+                  modulos_ativos=["acesso_informacao", "participacao_social", "quadro_servicos"],
+              )
+              salvar_auditoria(auditoria)
+              auditorias.append(auditoria)
+              from app.reports.report_builder import construir_dataframe
+              df_org = construir_dataframe(auditoria)
+              if not df_org.empty:
+                  salvar_resultados(df_org, auditoria, "data/resultados")
+
+          print("Auditoria concluída.")
+          EOF
+
+      - name: Commit dos resultados
+        run: |
+          git config user.name "ITA-Robô"
+          git config user.email "ita-robo@users.noreply.github.com"
+          git add data/resultados/ data/ita_robo.db || true
+          git diff --cached --quiet || git commit -m "chore: resultados da auditoria mensal $(date +'%Y-%m')"
+          git push
