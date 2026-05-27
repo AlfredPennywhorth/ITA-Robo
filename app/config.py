@@ -37,7 +37,6 @@ FORMATOS_ABERTOS = {".csv", ".ods", ".odt", ".txt", ".json", ".xml", ".xlsx"}
 DOMINIOS_LEGISLACAO_OFICIAL = [
     "legislacao.prefeitura.sp.gov.br",
     "www.planalto.gov.br",
-    "www.legisweb.com.br",
 ]
 
 # Banco de dados SQLite

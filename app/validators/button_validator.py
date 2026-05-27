@@ -34,22 +34,29 @@ def validar_botoes(
     """Valida a presença de botões obrigatórios na página.
 
     botoes_config: lista de dicts com chaves 'texto', 'obrigatorio', 'posicao_esperada' (opcional).
+
+    Distinção de contexto:
+    - CONFORME: link encontrado dentro de elemento nav/header (menu principal).
+    - PARCIAL: link encontrado fora do menu principal (corpo, rodapé, breadcrumb).
+    - NAO_CONFORME: nenhum link com o texto encontrado.
     """
     links_menu = extrair_menu_botoes(html, url_base)
     todos_links = extrair_links(html, url_base)
-    combinado = links_menu + todos_links
 
     resultados: list[ResultadoCriterio] = []
 
-    for idx, botao in enumerate(botoes_config):
+    for botao in botoes_config:
         texto_alvo = botao.get("texto", "")
         obrigatorio = botao.get("obrigatorio", True)
         posicao_esperada = botao.get("posicao_esperada")
 
         criterio_id = f"botao_{texto_alvo.lower().replace(' ', '_').replace('à', 'a').replace('ã', 'a')}"
-        encontrado, evidencia, href = _encontrar_botao(texto_alvo, combinado)
 
-        if not encontrado:
+        no_menu, ev_menu, href_menu = _encontrar_botao(texto_alvo, links_menu)
+        na_pagina, ev_pagina, href_pagina = _encontrar_botao(texto_alvo, todos_links)
+
+        if not na_pagina:
+            # Não encontrado em lugar algum
             status = (
                 StatusValidacao.NAO_CONFORME
                 if obrigatorio
@@ -59,12 +66,13 @@ def validar_botoes(
                 criterio_id=criterio_id,
                 descricao=f'Botão "{texto_alvo}" presente na página inicial',
                 status=status,
-                evidencia=evidencia,
+                evidencia=f'Botão "{texto_alvo}" não localizado na página.',
                 url=url_base,
             )
-        else:
-            # Verifica posição (se configurada)
+        elif no_menu:
+            # Encontrado no menu principal — verifica posição se necessário
             status = StatusValidacao.CONFORME
+            evidencia = ev_menu
             if posicao_esperada is not None:
                 posicao_real = _posicao_no_menu(texto_alvo, links_menu)
                 if posicao_real is None or posicao_real != posicao_esperada:
@@ -73,14 +81,23 @@ def validar_botoes(
                         f" | Posição esperada: {posicao_esperada}, "
                         f"posição encontrada: {posicao_real or 'indeterminada'}."
                     )
-
             resultado = ResultadoCriterio(
                 criterio_id=criterio_id,
                 descricao=f'Botão "{texto_alvo}" presente na página inicial',
                 status=status,
                 evidencia=evidencia,
                 url=url_base,
-                detalhes={"href": href},
+                detalhes={"href": href_menu},
+            )
+        else:
+            # Encontrado fora do menu principal (corpo, rodapé, breadcrumb)
+            resultado = ResultadoCriterio(
+                criterio_id=criterio_id,
+                descricao=f'Botão "{texto_alvo}" presente na página inicial',
+                status=StatusValidacao.PARCIAL,
+                evidencia=ev_pagina + " (link fora do menu principal — verificar posicionamento)",
+                url=url_base,
+                detalhes={"href": href_pagina},
             )
 
         resultados.append(resultado)

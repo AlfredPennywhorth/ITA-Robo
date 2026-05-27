@@ -50,6 +50,103 @@ HTML_COM_DATA = """
 </body></html>
 """
 
+# --- Fixtures para testes de falso positivo ---
+
+HTML_BOTAO_APENAS_RODAPE = """
+<html>
+<head><title>Teste</title></head>
+<body>
+  <nav>
+    <a href="/">Início</a>
+    <a href="/secretarias">Secretarias</a>
+  </nav>
+  <main>
+    <p>Conteúdo principal da página.</p>
+  </main>
+  <footer>
+    <a href="/acesso-informacao">Acesso à Informação</a>
+  </footer>
+</body>
+</html>
+"""
+
+HTML_MENCAO_TEXTUAL_SEM_LINK = """
+<html>
+<head><title>Teste</title></head>
+<body>
+  <nav>
+    <a href="/">Início</a>
+  </nav>
+  <main>
+    <p>Esta página contém informações sobre Acesso à Informação, mas sem link.</p>
+  </main>
+</body>
+</html>
+"""
+
+HTML_SECAO_APENAS_RODAPE = """
+<html>
+<body>
+  <header><h1>Título da Página</h1></header>
+  <main>
+    <h2>Institucional</h2>
+    <p>Conteúdo institucional.</p>
+  </main>
+  <footer>
+    <nav>
+      <a href="/conferencias">Conferências</a>
+      <a href="/audiencias">Audiências Públicas</a>
+    </nav>
+  </footer>
+</body>
+</html>
+"""
+
+HTML_ARQUIVO_ODS = """
+<html>
+<body>
+  <a href="/dados/planilha.ods">Baixar planilha ODS</a>
+  <a href="/dados/relatorio.pdf">Baixar PDF</a>
+</body>
+</html>
+"""
+
+HTML_LEGISLACAO_PDF = """
+<html>
+<body>
+  <a href="/legislacao/lei-1234.pdf">Lei Municipal 1234/2020</a>
+</body>
+</html>
+"""
+
+HTML_LEGISLACAO_OFICIAL = """
+<html>
+<body>
+  <a href="https://legislacao.prefeitura.sp.gov.br/leis/lei-municipal-1234">Lei Municipal 1234/2020</a>
+</body>
+</html>
+"""
+
+HTML_FRASE_NEGATIVA = """
+<html>
+<body>
+  <h2>Conferências</h2>
+  <p>Não há Conferência Municipal agendada para o exercício corrente.</p>
+  <h2>Audiências Públicas</h2>
+  <p>Não há Audiência Pública agendada no momento.</p>
+</body>
+</html>
+"""
+
+HTML_DATA_VENCIDA = """
+<html>
+<body>
+  <p>Última atualização: 15/01/2020</p>
+  <p>Conteúdo desatualizado.</p>
+</body>
+</html>
+"""
+
 URL_BASE = "https://www.prefeitura.sp.gov.br/teste"
 
 
@@ -332,3 +429,103 @@ class TestDatabase:
         detalhes = db.buscar_auditoria(aid)
         assert detalhes is not None
         assert detalhes["nome_orgao"] == "Secretaria Teste"
+
+
+# ---------------------------------------------------------------------------
+# Testes: falsos positivos e falsos negativos
+# ---------------------------------------------------------------------------
+
+class TestFalsoPositivo:
+    """Cobre os cenários de falso positivo e falso negativo identificados na auditoria."""
+
+    def test_mencao_textual_sem_link_nao_conforme(self):
+        """Menção textual sem <a> não deve ser confundida com botão de menu."""
+        from app.validators.button_validator import validar_botoes
+        from app.validators.base import StatusValidacao
+
+        botoes = [{"texto": "Acesso à Informação", "obrigatorio": True}]
+        resultados = validar_botoes(HTML_MENCAO_TEXTUAL_SEM_LINK, URL_BASE, botoes)
+        assert resultados[0].status == StatusValidacao.NAO_CONFORME
+
+    def test_botao_fora_do_menu_parcial(self):
+        """Link no rodapé sem estar no <nav> deve retornar PARCIAL, não CONFORME."""
+        from app.validators.button_validator import validar_botoes
+        from app.validators.base import StatusValidacao
+
+        botoes = [{"texto": "Acesso à Informação", "obrigatorio": True}]
+        resultados = validar_botoes(HTML_BOTAO_APENAS_RODAPE, URL_BASE, botoes)
+        assert resultados[0].status == StatusValidacao.PARCIAL
+
+    def test_secao_apenas_no_rodape_nao_conforme_ou_parcial(self):
+        """Seção mencionada apenas em link de rodapé não deve ser CONFORME (sem H1–H4)."""
+        from app.validators.section_validator import validar_secoes
+        from app.validators.base import StatusValidacao
+
+        resultados = validar_secoes(
+            HTML_SECAO_APENAS_RODAPE, URL_BASE,
+            ["Conferências", "Audiências Públicas"],
+        )
+        for r in resultados:
+            # Deve ser no máximo PARCIAL — a seção não tem título formal
+            assert r.status in (StatusValidacao.PARCIAL, StatusValidacao.NAO_CONFORME)
+
+    def test_arquivo_ods_conforme(self):
+        """Arquivo ODS deve ser reconhecido como formato aberto (CONFORME)."""
+        from app.validators.file_format_validator import validar_formatos_arquivos
+        from app.validators.base import StatusValidacao
+
+        r = validar_formatos_arquivos(HTML_ARQUIVO_ODS, URL_BASE)
+        assert r.status == StatusValidacao.CONFORME
+
+    def test_apenas_pdf_nao_conforme(self):
+        """Apenas arquivos PDF — sem versão aberta — deve ser NAO_CONFORME."""
+        from app.validators.file_format_validator import validar_formatos_arquivos
+        from app.validators.base import StatusValidacao
+
+        r = validar_formatos_arquivos(HTML_COM_PDF_APENAS, URL_BASE)
+        assert r.status == StatusValidacao.NAO_CONFORME
+
+    def test_legislacao_em_pdf_nao_oficial(self):
+        """Link de legislação apontando para PDF local não é repositório oficial."""
+        from app.validators.link_validator import validar_legislacao_oficial
+        from app.validators.base import StatusValidacao
+
+        r = validar_legislacao_oficial(HTML_LEGISLACAO_PDF, URL_BASE)
+        assert r.status in (StatusValidacao.NAO_CONFORME, StatusValidacao.PARCIAL)
+
+    def test_legislacao_repositorio_oficial_conforme(self):
+        """Link para legislacao.prefeitura.sp.gov.br deve ser CONFORME."""
+        from app.validators.link_validator import validar_legislacao_oficial
+        from app.validators.base import StatusValidacao
+
+        r = validar_legislacao_oficial(HTML_LEGISLACAO_OFICIAL, URL_BASE)
+        assert r.status == StatusValidacao.CONFORME
+
+    def test_frase_negativa_valida_nao_suprime_secao(self):
+        """Frase negativa padrão ('Não há X agendado') não deve eliminar a seção — CONFORME ou PARCIAL."""
+        from app.validators.section_validator import validar_secoes
+        from app.validators.base import StatusValidacao
+
+        # HTML tem <h2>Conferências</h2> e <h2>Audiências Públicas</h2> — seções presentes como títulos
+        resultados = validar_secoes(
+            HTML_FRASE_NEGATIVA, URL_BASE,
+            ["Conferências", "Audiências Públicas"],
+        )
+        for r in resultados:
+            assert r.status in (StatusValidacao.CONFORME, StatusValidacao.PARCIAL)
+
+    def test_data_vencida_nao_conforme(self):
+        """Data de atualização com mais de 13 meses deve ser NAO_CONFORME."""
+        from app.validators.date_validator import validar_data_atualizacao
+        from app.validators.base import StatusValidacao
+
+        r = validar_data_atualizacao(HTML_DATA_VENCIDA, URL_BASE)
+        assert r.status == StatusValidacao.NAO_CONFORME
+
+    def test_pagina_sem_data_nao_conforme(self):
+        """Página completamente sem data deve ser NAO_CONFORME."""
+        from app.validators.date_validator import validar_data_atualizacao
+        from app.validators.base import StatusValidacao
+
+        r = validar_data_atualizacao(HTML_SEM_BOTOES, URL_BASE)
+        assert r.status == StatusValidacao.NAO_CONFORME
