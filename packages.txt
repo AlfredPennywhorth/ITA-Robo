@@ -1,5 +1,3 @@
-# Dependências Linux necessárias para o Playwright/Chromium no Streamlit Community Cloud.
-# O Streamlit Cloud instala esses pacotes via apt antes de rodar a aplicação.
 libnss3
 libnspr4
 libatk1.0-0
