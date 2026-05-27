@@ -15,6 +15,7 @@ from rapidfuzz import fuzz
 from app.config import RULES_DIR
 from app.crawler.fetcher import buscar_html
 from app.crawler.browser import buscar_html_dinamico
+from app.crawler.parser import extrair_cards_navegacao
 from app.validators.base import (
     ResultadoCriterio,
     StatusValidacao,
@@ -68,6 +69,15 @@ _DOMINIOS_EXTERNOS_REJEITADOS = {
     "www.planalto.gov.br",
 }
 
+_SUBPAGINAS_PRIORIDADE_BAIXA_ACESSO_INFORMACAO = {
+    "cmai",
+    "auditorias",
+    "contratos",
+    "compras",
+    "sic",
+    "institucional",
+}
+
 _STATUS_PRIORIDADE = {
     StatusValidacao.CONFORME.value: 4,
     StatusValidacao.PARCIAL.value: 3,
@@ -101,7 +111,10 @@ def _coletar_links_com_contexto(html: str, url_base: str) -> list[dict[str, Any]
         is_menu = any(
             p.name in ("nav", "header") for p in tag.parents if getattr(p, "name", None)
         )
-        is_card = any(k in classes_ancestrais for k in ("card", "bloco", "box", "tile"))
+        is_card = any(
+            k in classes_ancestrais
+            for k in ("card", "bloco", "box", "tile", "item", "painel", "panel")
+        )
         is_button = (
             tag.get("role", "").lower() == "button"
             or any(k in classes_tag for k in ("btn", "button", "botao", "cta"))
@@ -129,6 +142,42 @@ def _normalizar_texto_busca(texto: str) -> str:
     return " ".join(sem_acentos.lower().split())
 
 
+def _normalizar_slug(texto: str) -> str:
+    texto_norm = _normalizar_texto_busca(texto).replace("-", "_")
+    return "_".join(parte for parte in texto_norm.split("_") if parte)
+
+
+def _segmentos_slug(url_ou_caminho: str) -> list[str]:
+    caminho = urlparse(url_ou_caminho).path if "://" in url_ou_caminho else url_ou_caminho
+    return [
+        _normalizar_slug(segmento.rsplit(".", 1)[0])
+        for segmento in caminho.strip("/").split("/")
+        if segmento.strip("/")
+    ]
+
+
+def _classificar_candidato_modulo(link: dict[str, Any], modulo: str) -> dict[str, Any]:
+    segmentos = _segmentos_slug(link["href_absoluto"])
+    slug_modulo = _normalizar_slug(_MODULOS_SLUG.get(modulo, ""))
+    ultimo_segmento = segmentos[-1] if segmentos else ""
+    contem_slug = bool(slug_modulo and slug_modulo in segmentos)
+    slug_exato = bool(slug_modulo and ultimo_segmento == slug_modulo)
+    subpagina_baixa_prioridade = (
+        modulo == "acesso_informacao"
+        and ultimo_segmento in _SUBPAGINAS_PRIORIDADE_BAIXA_ACESSO_INFORMACAO
+        and not slug_exato
+    )
+    return {
+        **link,
+        "segmentos_slug": segmentos,
+        "slug_modulo": slug_modulo,
+        "slug_no_path": contem_slug,
+        "slug_exato": slug_exato,
+        "subpagina_baixa_prioridade": subpagina_baixa_prioridade,
+        "profundidade_path": len(segmentos),
+    }
+
+
 def _resolve_entrada_secao(entrada: Any) -> tuple[str, list[str]]:
     if isinstance(entrada, dict):
         nome = entrada.get("nome", "")
@@ -150,12 +199,67 @@ def _score_correspondencia_link(texto_link: str, termo: str) -> int:
     return int(fuzz.partial_ratio(termo_norm, texto_norm))
 
 
+def _deduplicar_links_contexto(candidatos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unicos: list[dict[str, Any]] = []
+    vistos: set[str] = set()
+    for candidato in candidatos:
+        href = candidato.get("href_absoluto")
+        if not href or href in vistos:
+            continue
+        vistos.add(href)
+        unicos.append(candidato)
+    return unicos
+
+
+def _mapear_cards_por_secao(cards: list[dict[str, Any]], secoes: list[Any]) -> dict[str, dict[str, Any]]:
+    mapeamento: dict[str, dict[str, Any]] = {}
+    for entrada in secoes:
+        nome_display, termos = _resolve_entrada_secao(entrada)
+        melhor_card = None
+        melhor_score = 0
+        for card in cards:
+            texto_card = " ".join(
+                parte for parte in (
+                    card.get("texto_principal", ""),
+                    card.get("titulo", ""),
+                    card.get("descricao", ""),
+                    card.get("texto", ""),
+                ) if parte
+            )
+            score = max(
+                (_score_correspondencia_link(texto_card, termo) for termo in termos),
+                default=0,
+            )
+            if score >= 80 and score > melhor_score:
+                melhor_score = score
+                melhor_card = card
+        if melhor_card:
+            mapeamento[nome_display] = melhor_card
+    return mapeamento
+
+
 def _descobrir_subpaginas_obrigatorias(
     html: str,
     url_pagina: str,
     subpaginas_obrigatorias: list[Any],
 ) -> dict[str, Any]:
     links = _coletar_links_com_contexto(html, url_pagina)
+    cards = [
+        {
+            "texto": " ".join(
+                parte for parte in (
+                    card.get("texto_principal", ""),
+                    card.get("descricao", ""),
+                ) if parte
+            ),
+            "href_absoluto": card.get("href_absoluto", ""),
+            "interno": card.get("interno", False),
+            "ordem": card.get("ordem", 0),
+        }
+        for card in extrair_cards_navegacao(html, url_pagina)
+        if card.get("href_absoluto")
+    ]
+    links = _deduplicar_links_contexto(links + cards)
     encontrados: list[dict[str, str]] = []
     nao_encontrados: list[dict[str, str]] = []
     urls_ja_escolhidas: set[str] = set()
@@ -238,15 +342,14 @@ def selecionar_url_principal_modulo(
     modulo: str,
     texto_botao: str,
 ) -> dict[str, Any]:
-    slug = _MODULOS_SLUG.get(modulo, "")
     links = _coletar_links_com_contexto(html, url_base)
     candidatos: list[dict[str, Any]] = []
     for link in links:
         texto = link.get("texto", "")
         score_texto = fuzz.partial_ratio(texto_botao.lower(), texto.lower()) if texto else 0
-        slug_no_path = slug in urlparse(link["href_absoluto"]).path.lower()
-        if score_texto >= 80 or slug_no_path:
-            candidatos.append({**link, "score_texto": score_texto, "slug_no_path": slug_no_path})
+        classificado = _classificar_candidato_modulo(link, modulo)
+        if score_texto >= 80 or classificado["slug_no_path"]:
+            candidatos.append({**classificado, "score_texto": score_texto})
 
     internos = [c for c in candidatos if c["interno"]]
     dominio_base = _normalizar_dominio(url_base)
@@ -273,10 +376,13 @@ def selecionar_url_principal_modulo(
     internos_ordenados = sorted(
         internos,
         key=lambda c: (
+            1 if c["slug_exato"] else 0,
             1 if c["slug_no_path"] else 0,
+            0 if c["subpagina_baixa_prioridade"] else 1,
             1 if c["is_menu"] else 0,
             1 if (c["is_card"] or c["is_button"]) else 0,
             c["score_texto"],
+            -c["profundidade_path"],
             -c["ordem"],
         ),
         reverse=True,
@@ -291,7 +397,13 @@ def selecionar_url_principal_modulo(
     )
     motivo = (
         f"URL interna priorizada ({contexto})"
-        + (" com slug do módulo no caminho." if escolhido["slug_no_path"] else ".")
+        + (
+            " com slug exato do módulo."
+            if escolhido["slug_exato"]
+            else " com slug do módulo no caminho."
+            if escolhido["slug_no_path"]
+            else "."
+        )
     )
 
     return {
@@ -438,6 +550,8 @@ def auditar_orgao(
             "url_principal": url_pagina,
             "motivo": selecao_url.get("motivo", ""),
             "externos_ignorados": selecao_url.get("externos_ignorados", []),
+            "cards_encontrados": [],
+            "cards_com_link_interno": [],
             "status": selecao_url.get("status", StatusValidacao.NAO_VERIFICADO.value),
         }
 
@@ -450,12 +564,94 @@ def auditar_orgao(
 
         if html_pagina:
             paginas_validacao = [{"url": url_pagina, "html": html_pagina}]
+            cards_modulo = extrair_cards_navegacao(html_pagina, url_pagina)
+            secoes = regra.get("pagina_principal", {}).get("secoes_obrigatorias", [])
+            cards_por_secao = _mapear_cards_por_secao(cards_modulo, secoes)
+            cards_encontrados = [
+                {
+                    "texto": card.get("texto_principal", ""),
+                    "url": card.get("href_absoluto") or "",
+                }
+                for card in cards_modulo
+            ]
+            cards_internos = [
+                {
+                    "texto": card.get("texto_principal", ""),
+                    "url": card.get("href_absoluto") or "",
+                }
+                for card in cards_modulo
+                if card.get("interno") and card.get("href_absoluto")
+            ]
+            selecao_urls_modulos[modulo]["cards_encontrados"] = cards_encontrados
+            selecao_urls_modulos[modulo]["cards_com_link_interno"] = cards_internos
+            if cards_encontrados:
+                evidencias_por_url[url_pagina].append(
+                    f"[{modulo}] Cards encontrados: "
+                    + ", ".join(card["texto"] for card in cards_encontrados if card["texto"])
+                )
+            if cards_internos:
+                evidencias_por_url[url_pagina].append(
+                    f"[{modulo}] Cards com link interno: "
+                    + ", ".join(card["texto"] for card in cards_internos if card["texto"])
+                )
 
             if modulo == "acesso_informacao":
+                paginas_cards_por_secao: dict[str, dict[str, str]] = {}
+                urls_cards_visitadas: set[str] = set()
+                html_cards_por_url: dict[str, str] = {}
+                for nome_secao, card in cards_por_secao.items():
+                    url_card = card.get("href_absoluto")
+                    if not card.get("interno") or not url_card or url_card == url_pagina:
+                        continue
+                    if url_card in urls_cards_visitadas:
+                        paginas_cards_por_secao[nome_secao] = {
+                            "url": url_card,
+                            "html": html_cards_por_url.get(url_card, ""),
+                        }
+                        continue
+
+                    html_card, erro_card = _buscar_e_rastrear(url_card)
+                    if html_card:
+                        paginas_validacao.append({"url": url_card, "html": html_card})
+                        paginas_cards_por_secao[nome_secao] = {"url": url_card, "html": html_card}
+                        urls_cards_visitadas.add(url_card)
+                        html_cards_por_url[url_card] = html_card
+                        subpaginas_visitadas.append(
+                            {
+                                "modulo": modulo,
+                                "origem": "card",
+                                "nome": nome_secao,
+                                "url": url_card,
+                                "status": StatusValidacao.CONFORME.value,
+                                "evidencia": "Subpágina interna acessada a partir de card/botão de navegação.",
+                            }
+                        )
+                        evidencias_por_url[url_card].append(
+                            f"[{modulo}] Subpágina acessada a partir do card \"{nome_secao}\"."
+                        )
+                    else:
+                        subpaginas_visitadas.append(
+                            {
+                                "modulo": modulo,
+                                "origem": "card",
+                                "nome": nome_secao,
+                                "url": url_card,
+                                "status": StatusValidacao.NAO_VERIFICADO.value,
+                                "evidencia": "Subpágina interna do card não acessível no momento da avaliação.",
+                            }
+                        )
+                        if erro_card:
+                            erros.append(
+                                f"[{modulo}] Falha ao acessar subpágina do card {url_card}: {erro_card}"
+                            )
+
                 subpaginas_cfg = regra.get("subpaginas_obrigatorias_institucional", [])
+                pagina_base_institucional = {"url": url_pagina, "html": html_pagina}
+                if paginas_cards_por_secao.get("Institucional", {}).get("html"):
+                    pagina_base_institucional = paginas_cards_por_secao["Institucional"]
                 descoberta = _descobrir_subpaginas_obrigatorias(
-                    html_pagina,
-                    url_pagina,
+                    pagina_base_institucional["html"],
+                    pagina_base_institucional["url"],
                     subpaginas_cfg,
                 )
                 for faltante in descoberta["nao_encontrados"]:
@@ -471,17 +667,22 @@ def auditar_orgao(
                         subpaginas_visitadas.append(
                             {
                                 "modulo": modulo,
+                                "origem": "institucional",
                                 "nome": subpagina["nome"],
                                 "url": url_sub,
                                 "status": StatusValidacao.CONFORME.value,
                                 "evidencia": "Subpágina obrigatória acessada com sucesso.",
                             }
                         )
+                        evidencias_por_url[url_sub].append(
+                            f"[{modulo}] Subpágina obrigatória institucional \"{subpagina['nome']}\" acessada."
+                        )
                     else:
                         msg_falha = "Subpágina não acessível no momento da avaliação"
                         subpaginas_visitadas.append(
                             {
                                 "modulo": modulo,
+                                "origem": "institucional",
                                 "nome": subpagina["nome"],
                                 "url": url_sub,
                                 "status": StatusValidacao.NAO_VERIFICADO.value,
@@ -505,13 +706,43 @@ def auditar_orgao(
                             erros.append(f"[{modulo}] Falha ao acessar subpágina {url_sub}: {erro_sub}")
 
             # 3. Validar seções obrigatórias
-            secoes = regra.get("pagina_principal", {}).get("secoes_obrigatorias", [])
             if secoes:
                 res_secoes = _validar_secoes_em_paginas(
                     paginas_validacao,
                     secoes,
                     modulo=modulo,
                 )
+                if modulo == "acesso_informacao":
+                    for entrada_secao, resultado_secao in zip(secoes, res_secoes):
+                        nome_secao, _ = _resolve_entrada_secao(entrada_secao)
+                        pagina_card = paginas_cards_por_secao.get(nome_secao)
+                        if (
+                            not pagina_card
+                            or not pagina_card.get("url")
+                            or resultado_secao.status != StatusValidacao.CONFORME
+                            or "card/botão de navegação" not in resultado_secao.evidencia
+                        ):
+                            continue
+
+                        evidencia_complementar = (
+                            f'Subpágina interna do card visitada: {pagina_card["url"]}.'
+                        )
+                        html_card = pagina_card.get("html")
+                        if html_card:
+                            complementar = validar_secoes(
+                                html_card,
+                                pagina_card["url"],
+                                [entrada_secao],
+                                modulo=modulo,
+                            )[0]
+                            if complementar.status in (
+                                StatusValidacao.CONFORME,
+                                StatusValidacao.PARCIAL,
+                            ):
+                                evidencia_complementar += f" Evidência complementar: {complementar.evidencia}"
+                        resultado_secao.evidencia = (
+                            f"{resultado_secao.evidencia} {evidencia_complementar}".strip()
+                        )
                 resultados_modulo.extend(res_secoes)
 
             # 4. Validar data de atualização

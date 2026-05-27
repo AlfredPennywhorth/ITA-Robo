@@ -34,6 +34,35 @@ def exportar_excel(
             resumo.to_excel(writer, index=False, sheet_name="Resumo por Módulo")
 
         if auditoria:
+            selecao_urls_modulos = auditoria.get("selecao_urls_modulos", {})
+            if selecao_urls_modulos:
+                linhas_cards = []
+                for modulo, info in selecao_urls_modulos.items():
+                    for card in info.get("cards_encontrados", []):
+                        linhas_cards.append(
+                            {
+                                "modulo": modulo,
+                                "tipo": "card_encontrado",
+                                "texto": card.get("texto", ""),
+                                "url": card.get("url", ""),
+                            }
+                        )
+                    for card in info.get("cards_com_link_interno", []):
+                        linhas_cards.append(
+                            {
+                                "modulo": modulo,
+                                "tipo": "card_link_interno",
+                                "texto": card.get("texto", ""),
+                                "url": card.get("url", ""),
+                            }
+                        )
+                if linhas_cards:
+                    pd.DataFrame(linhas_cards).to_excel(
+                        writer,
+                        index=False,
+                        sheet_name="Cards dos Módulos",
+                    )
+
             subpaginas = auditoria.get("subpaginas_visitadas", [])
             if subpaginas:
                 pd.DataFrame(subpaginas).to_excel(
