@@ -44,6 +44,11 @@ class ResultadoCriterio:
         """Retorna pontuação numérica do status (None = não entra no cálculo)."""
         return PONTUACAO_STATUS[self.status]
 
+    @property
+    def requer_revisao_humana(self) -> bool:
+        """True para critérios que necessitam de verificação manual (PARCIAL ou NAO_VERIFICADO)."""
+        return self.status in (StatusValidacao.PARCIAL, StatusValidacao.NAO_VERIFICADO)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "criterio_id": self.criterio_id,
@@ -53,6 +58,7 @@ class ResultadoCriterio:
             "pontuacao": self.pontuacao,
             "evidencia": self.evidencia,
             "url": self.url,
+            "requer_revisao_humana": self.requer_revisao_humana,
         }
 
 

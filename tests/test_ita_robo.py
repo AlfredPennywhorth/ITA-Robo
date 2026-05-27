@@ -529,3 +529,163 @@ class TestFalsoPositivo:
 
         r = validar_data_atualizacao(HTML_SEM_BOTOES, URL_BASE)
         assert r.status == StatusValidacao.NAO_CONFORME
+
+
+# ---------------------------------------------------------------------------
+# Testes: ajustes de confiabilidade para piloto
+# ---------------------------------------------------------------------------
+
+HTML_COM_TEXTO_PADRAO = """
+<html><body>
+  <h1>Quadro de Serviços</h1>
+  <p>Esta página apresenta os serviços públicos e equipamentos disponibilizados pela secretaria.</p>
+  <h2>Lista de Serviços</h2>
+  <ul><li>Serviço A</li></ul>
+</body></html>
+"""
+
+HTML_SEM_TEXTO_PADRAO = """
+<html><body>
+  <h1>Quadro de Serviços</h1>
+  <h2>Lista de Serviços</h2>
+  <ul><li>Serviço A</li></ul>
+</body></html>
+"""
+
+HTML_FUNDO_PUBLICO_SINGULAR = """
+<html><body>
+  <h2>Conselhos e Órgãos Colegiados</h2>
+  <h2>Conferências</h2>
+  <h2>Audiências Públicas</h2>
+  <h2>Consultas Públicas</h2>
+  <h2>Eventos e Promoção da Cidadania</h2>
+  <h2>Fundo Público</h2>
+</body></html>
+"""
+
+HTML_FUNDOS_GENERICO = """
+<html><body>
+  <h2>Fundos</h2>
+  <p>Esta seção trata dos fundos municipais.</p>
+</body></html>
+"""
+
+HTML_MENU_GRANDE = """
+<html>
+<head><title>Portal</title></head>
+<body>
+  <nav>
+    <a href="/">Início</a>
+    <a href="/noticias">Notícias</a>
+    <a href="/quadro-servicos">Quadro de Serviços</a>
+    <a href="/acesso-informacao">Acesso à Informação</a>
+    <a href="/participacao">Participação Social</a>
+    <a href="/ouvidoria">Ouvidoria</a>
+    <a href="/contato">Contato</a>
+    <a href="/mapa">Mapa do Site</a>
+    <a href="/acessibilidade">Acessibilidade</a>
+  </nav>
+</body>
+</html>
+"""
+
+
+class TestAjustesConfiabilidade:
+    """Testa os ajustes de confiabilidade para piloto controlado."""
+
+    # --- text_validator integrado ---
+
+    def test_texto_padrao_conforme(self):
+        """Texto de apresentação presente deve ser CONFORME ou PARCIAL."""
+        from app.validators.text_validator import validar_texto_padrao
+        from app.validators.base import StatusValidacao
+
+        textos = ["Esta página apresenta os serviços públicos e equipamentos disponibilizados"]
+        resultados = validar_texto_padrao(HTML_COM_TEXTO_PADRAO, URL_BASE, textos)
+        assert len(resultados) == 1
+        assert resultados[0].status in (StatusValidacao.CONFORME, StatusValidacao.PARCIAL)
+
+    def test_texto_padrao_nao_conforme(self):
+        """Ausência do texto de apresentação deve ser NAO_CONFORME."""
+        from app.validators.text_validator import validar_texto_padrao
+        from app.validators.base import StatusValidacao
+
+        textos = ["Esta página apresenta os serviços públicos e equipamentos disponibilizados"]
+        resultados = validar_texto_padrao(HTML_SEM_TEXTO_PADRAO, URL_BASE, textos)
+        assert len(resultados) == 1
+        assert resultados[0].status == StatusValidacao.NAO_CONFORME
+
+    # --- aliases de fundos ---
+
+    def test_alias_fundo_publico_singular_conforme(self):
+        """Seção 'Fundo Público' (singular) deve ser aceita pelo alias."""
+        from app.validators.section_validator import validar_secoes
+        from app.validators.base import StatusValidacao
+
+        secoes = [
+            {"nome": "Fundos Públicos", "aliases": ["Fundos Públicos", "Fundo Público", "Fundos"]}
+        ]
+        resultados = validar_secoes(HTML_FUNDO_PUBLICO_SINGULAR, URL_BASE, secoes)
+        assert len(resultados) == 1
+        assert resultados[0].status in (StatusValidacao.CONFORME, StatusValidacao.PARCIAL)
+
+    def test_alias_fundos_generico_encontrado(self):
+        """Seção 'Fundos' (genérico) deve ser aceita pelo alias."""
+        from app.validators.section_validator import validar_secoes
+        from app.validators.base import StatusValidacao
+
+        secoes = [
+            {"nome": "Fundos Públicos", "aliases": ["Fundos Públicos", "Fundo Público", "Fundos"]}
+        ]
+        resultados = validar_secoes(HTML_FUNDOS_GENERICO, URL_BASE, secoes)
+        assert len(resultados) == 1
+        assert resultados[0].status in (StatusValidacao.CONFORME, StatusValidacao.PARCIAL)
+
+    # --- posição NAO_VERIFICADO em menu grande ---
+
+    def test_posicao_nao_verificado_menu_grande(self):
+        """Menu com mais de MAX_LINKS_MENU_CONFIAVEL links deve retornar NAO_VERIFICADO para posição."""
+        from app.validators.button_validator import validar_botoes
+        from app.validators.base import StatusValidacao
+
+        botoes = [{"texto": "Quadro de Serviços", "obrigatorio": True, "posicao_esperada": 3}]
+        resultados = validar_botoes(HTML_MENU_GRANDE, URL_BASE, botoes)
+        assert len(resultados) == 1
+        assert resultados[0].status == StatusValidacao.NAO_VERIFICADO
+        assert "revisão humana" in resultados[0].evidencia.lower() or "confiável" in resultados[0].evidencia.lower()
+
+    def test_posicao_correta_menu_pequeno(self):
+        """Botão na posição correta em menu pequeno deve ser CONFORME."""
+        from app.validators.button_validator import validar_botoes
+        from app.validators.base import StatusValidacao
+
+        botoes = [{"texto": "Quadro de Serviços", "obrigatorio": True, "posicao_esperada": 3}]
+        resultados = validar_botoes(HTML_COM_BOTOES, URL_BASE, botoes)
+        assert len(resultados) == 1
+        assert resultados[0].status == StatusValidacao.CONFORME
+
+    # --- requer_revisao_humana ---
+
+    def test_requer_revisao_parcial(self):
+        """Status PARCIAL deve marcar requer_revisao_humana=True."""
+        from app.validators.base import ResultadoCriterio, StatusValidacao
+
+        r = ResultadoCriterio("x", "Desc", status=StatusValidacao.PARCIAL)
+        assert r.requer_revisao_humana is True
+        assert r.to_dict()["requer_revisao_humana"] is True
+
+    def test_requer_revisao_nao_verificado(self):
+        """Status NAO_VERIFICADO deve marcar requer_revisao_humana=True."""
+        from app.validators.base import ResultadoCriterio, StatusValidacao
+
+        r = ResultadoCriterio("y", "Desc", status=StatusValidacao.NAO_VERIFICADO)
+        assert r.requer_revisao_humana is True
+        assert r.to_dict()["requer_revisao_humana"] is True
+
+    def test_nao_requer_revisao_conforme(self):
+        """Status CONFORME não deve marcar revisão humana."""
+        from app.validators.base import ResultadoCriterio, StatusValidacao
+
+        r = ResultadoCriterio("z", "Desc", status=StatusValidacao.CONFORME)
+        assert r.requer_revisao_humana is False
+        assert r.to_dict()["requer_revisao_humana"] is False

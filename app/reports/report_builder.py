@@ -20,6 +20,7 @@ from app.validators.section_validator import validar_secoes
 from app.validators.date_validator import validar_data_atualizacao
 from app.validators.file_format_validator import validar_formatos_arquivos
 from app.validators.link_validator import validar_links_quebrados, validar_legislacao_oficial
+from app.validators.text_validator import validar_texto_padrao
 
 import os
 
@@ -165,6 +166,14 @@ def auditar_orgao(
                     html_pagina, url_pagina, dominios_oficiais=dominios_oficiais, modulo=modulo
                 )
                 resultados_modulo.append(r_leg)
+
+            # 8. Validar textos padrão obrigatórios
+            textos_padrao = validacoes.get("textos_padrao", [])
+            if textos_padrao:
+                res_textos = validar_texto_padrao(
+                    html_pagina, url_pagina, textos_padrao, modulo=modulo
+                )
+                resultados_modulo.extend(res_textos)
         else:
             resultados_modulo.append(
                 ResultadoCriterio(

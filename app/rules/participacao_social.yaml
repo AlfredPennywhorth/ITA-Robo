@@ -13,7 +13,11 @@ pagina_principal:
     - "Audiências Públicas"
     - "Consultas Públicas"
     - "Eventos e Promoção da Cidadania"
-    - "Fundos Públicos"
+    - nome: "Fundos Públicos"
+      aliases:
+        - "Fundos Públicos"
+        - "Fundo Público"
+        - "Fundos"
 
 validacoes_gerais:
   exigir_data_atualizacao: true

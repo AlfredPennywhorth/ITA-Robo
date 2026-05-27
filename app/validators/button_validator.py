@@ -10,6 +10,10 @@ from app.validators.base import ResultadoCriterio, StatusValidacao
 # Limiar mínimo de similaridade para aceitar uma correspondência fuzzy
 LIMIAR_SIMILARIDADE = 80
 
+# Se o menu/header tiver mais links que este limiar, a contagem de posição
+# não é confiável (presença de logo, redes sociais, atalhos, etc.)
+MAX_LINKS_MENU_CONFIAVEL = 8
+
 
 def _encontrar_botao(
     texto_alvo: str, links: list[dict]
@@ -37,11 +41,14 @@ def validar_botoes(
 
     Distinção de contexto:
     - CONFORME: link encontrado dentro de elemento nav/header (menu principal).
-    - PARCIAL: link encontrado fora do menu principal (corpo, rodapé, breadcrumb).
+    - PARCIAL: link encontrado fora do menu principal (corpo, rodapé, breadcrumb),
+               ou encontrado no menu mas em posição diferente da esperada.
+    - NAO_VERIFICADO: botão no menu mas posição não verificável (menu com muitos links).
     - NAO_CONFORME: nenhum link com o texto encontrado.
     """
     links_menu = extrair_menu_botoes(html, url_base)
     todos_links = extrair_links(html, url_base)
+    menu_confiavel = len(links_menu) <= MAX_LINKS_MENU_CONFIAVEL
 
     resultados: list[ResultadoCriterio] = []
 
@@ -74,13 +81,21 @@ def validar_botoes(
             status = StatusValidacao.CONFORME
             evidencia = ev_menu
             if posicao_esperada is not None:
-                posicao_real = _posicao_no_menu(texto_alvo, links_menu)
-                if posicao_real is None or posicao_real != posicao_esperada:
-                    status = StatusValidacao.PARCIAL
+                if not menu_confiavel:
+                    status = StatusValidacao.NAO_VERIFICADO
                     evidencia += (
-                        f" | Posição esperada: {posicao_esperada}, "
-                        f"posição encontrada: {posicao_real or 'indeterminada'}."
+                        f" | Posição não verificada automaticamente: menu contém "
+                        f"{len(links_menu)} links — estrutura não é confiável para "
+                        f"contagem de posição. Exige revisão humana."
                     )
+                else:
+                    posicao_real = _posicao_no_menu(texto_alvo, links_menu)
+                    if posicao_real is None or posicao_real != posicao_esperada:
+                        status = StatusValidacao.PARCIAL
+                        evidencia += (
+                            f" | Posição esperada: {posicao_esperada}, "
+                            f"posição encontrada: {posicao_real or 'indeterminada'}."
+                        )
             resultado = ResultadoCriterio(
                 criterio_id=criterio_id,
                 descricao=f'Botão "{texto_alvo}" presente na página inicial',

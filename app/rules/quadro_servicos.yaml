@@ -24,3 +24,5 @@ validacoes:
   dominio_legislacao_oficial:
     - "legislacao.prefeitura.sp.gov.br"
     - "www.planalto.gov.br"
+  textos_padrao:
+    - "Esta página apresenta os serviços públicos e equipamentos disponibilizados"
