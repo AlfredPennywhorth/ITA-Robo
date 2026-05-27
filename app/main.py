@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import io
 import os
+import sys
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app.config import RESULTADOS_DIR
 from app.manuais.gerenciador import (
