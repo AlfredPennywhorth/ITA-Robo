@@ -109,6 +109,8 @@
           <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Módulo</th>
           <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">URL principal escolhida</th>
           <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Motivo da escolha</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Cards encontrados</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Cards com link interno</th>
           <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Links externos ignorados</th>
         </tr>
         {% for _, info in selecao_urls_modulos.items() %}
@@ -122,6 +124,33 @@
             {% endif %}
           </td>
           <td style="padding:6px 12px;">{{ info.motivo }}</td>
+          <td style="padding:6px 12px;">
+            {% if info.cards_encontrados %}
+              <ul style="margin:0;padding-left:18px;">
+                {% for card in info.cards_encontrados %}
+                <li>
+                  {{ card.texto }}
+                  {% if card.url %}
+                  — <a href="{{ card.url }}" target="_blank">{{ card.url }}</a>
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td style="padding:6px 12px;">
+            {% if info.cards_com_link_interno %}
+              <ul style="margin:0;padding-left:18px;">
+                {% for card in info.cards_com_link_interno %}
+                <li><a href="{{ card.url }}" target="_blank">{{ card.texto }}</a></li>
+                {% endfor %}
+              </ul>
+            {% else %}
+            —
+            {% endif %}
+          </td>
           <td style="padding:6px 12px;">
             {% if info.externos_ignorados %}
               <ul style="margin:0;padding-left:18px;">
@@ -145,6 +174,7 @@
       <table style="width:100%">
         <tr style="background:#e3f2fd;">
           <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Módulo</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Origem</th>
           <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Subpágina</th>
           <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Status</th>
           <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">URL</th>
@@ -153,6 +183,7 @@
         {% for sub in subpaginas_visitadas %}
         <tr>
           <td style="padding:6px 12px;">{{ sub.modulo }}</td>
+          <td style="padding:6px 12px;">{{ sub.origem or '—' }}</td>
           <td style="padding:6px 12px;">{{ sub.nome }}</td>
           <td style="padding:6px 12px;">{{ sub.status }}</td>
           <td style="padding:6px 12px;word-break:break-all;"><a href="{{ sub.url }}" target="_blank">{{ sub.url }}</a></td>

@@ -38,6 +38,91 @@ HTML_COM_SECOES = """
 </body></html>
 """
 
+HTML_ACESSO_CONTROLADORIA_COM_CMAI = """
+<html>
+<body>
+  <nav>
+    <a href="/web/controladoria_geral/cmai">CMAI</a>
+    <a href="/web/controladoria_geral/acesso_a_informacao/">Acesso à Informação</a>
+  </nav>
+</body>
+</html>
+"""
+
+HTML_ACESSO_INFORMACAO_CARDS = """
+<html>
+<body>
+  <main class="cards-acesso">
+    <a class="card destaque" href="/web/controladoria_geral/acesso_a_informacao/institucional">
+      <h2>Institucional</h2>
+      <p>Estrutura e competências da Controladoria.</p>
+    </a>
+    <a class="box" href="/web/controladoria_geral/acesso_a_informacao/acoes">
+      <strong>Ações e Programas</strong>
+      <p>Projetos e iniciativas.</p>
+    </a>
+    <a class="tile" href="/web/controladoria_geral/acesso_a_informacao/perguntas">
+      <strong>Perguntas Frequentes</strong>
+      <p>Dúvidas frequentes.</p>
+    </a>
+    <div class="item clicavel" onclick="window.location='/web/controladoria_geral/acesso_a_informacao/classificadas'">
+      <h3>Informações Classificadas e Desclassificadas</h3>
+      <p>Consulte os registros.</p>
+    </div>
+    <a class="painel" href="/web/controladoria_geral/acesso_a_informacao/sic">
+      <h3>Serviço de Informação ao Cidadão – SIC</h3>
+      <p>Canais de atendimento.</p>
+    </a>
+    <a class="card" href="/web/controladoria_geral/acesso_a_informacao/auditorias">
+      <h3>Auditorias</h3>
+      <p>Relatórios de auditoria.</p>
+    </a>
+    <a class="card" href="/web/controladoria_geral/acesso_a_informacao/compras">
+      <h3>Compras Públicas</h3>
+      <p>Licitações e atas.</p>
+    </a>
+    <section class="card" data-href="/web/controladoria_geral/acesso_a_informacao/contratos">
+      <h3>Contratos Administrativos</h3>
+      <p>Contratos vigentes.</p>
+    </section>
+    <a class="tile" href="/web/controladoria_geral/acesso_a_informacao/convenios">
+      <h3>Convênios e Parcerias</h3>
+      <p>Instrumentos celebrados.</p>
+    </a>
+    <a class="box" href="/web/controladoria_geral/acesso_a_informacao/doacoes">
+      <h3>Doações, Comodatos, Brindes e Presentes</h3>
+      <p>Registros relacionados.</p>
+    </a>
+    <a class="painel" href="/web/controladoria_geral/acesso_a_informacao/integridade">
+      <h3>Programa de Integridade e Boas Práticas</h3>
+      <p>Diretrizes e documentos.</p>
+    </a>
+  </main>
+</body>
+</html>
+"""
+
+HTML_INSTITUCIONAL_CARD_SUBPAGINAS = """
+<html>
+<body>
+  <main>
+    <a class="card" href="/web/controladoria_geral/acesso_a_informacao/institucional/competencias">
+      <h2>Competências e Atribuições</h2>
+    </a>
+    <a class="card" href="/web/controladoria_geral/acesso_a_informacao/institucional/estrutura">
+      <h2>Organograma e Estrutura Administrativa</h2>
+    </a>
+    <a class="card" href="/web/controladoria_geral/acesso_a_informacao/institucional/servidores">
+      <h2>Lista de Servidores e Contatos</h2>
+    </a>
+    <a class="card" href="/web/controladoria_geral/acesso_a_informacao/institucional/agenda-presidente">
+      <h2>Agenda do Presidente</h2>
+    </a>
+  </main>
+</body>
+</html>
+"""
+
 HTML_COM_PDF_APENAS = """
 <html><body>
   <a href="/arquivo.pdf">Baixar relatório</a>
@@ -198,6 +283,19 @@ class TestParser:
         extensoes = {a["extensao"] for a in arquivos}
         assert ".pdf" in extensoes
 
+    def test_extrair_cards_navegacao_reconhece_blocos_clicaveis(self):
+        from app.crawler.parser import extrair_cards_navegacao
+
+        cards = extrair_cards_navegacao(
+            HTML_ACESSO_INFORMACAO_CARDS,
+            "https://www.prefeitura.sp.gov.br",
+        )
+
+        textos = {card["texto_principal"] for card in cards}
+        assert "Institucional" in textos
+        assert "Contratos Administrativos" in textos
+        assert any(card["interno"] for card in cards)
+
 
 # ---------------------------------------------------------------------------
 # Testes: validators/base
@@ -300,6 +398,35 @@ class TestSectionValidator:
             ["Seção Inexistente"],
         )
         assert resultados[0].status == StatusValidacao.NAO_CONFORME
+
+    def test_acesso_informacao_reconhece_cards_como_conforme(self):
+        from app.validators.section_validator import validar_secoes
+        from app.validators.base import StatusValidacao
+
+        secoes = [
+            "Institucional",
+            "Ações e Programas",
+            "Perguntas Frequentes",
+            "Informações Classificadas e Desclassificadas",
+            "Serviço de Informação ao Cidadão",
+            "Auditorias",
+            "Compras Públicas",
+            "Contratos Administrativos",
+            "Convênios e Parcerias",
+            "Doações, Comodatos, Brindes e Presentes",
+            "Programa de Integridade e Boas Práticas",
+        ]
+        resultados = validar_secoes(
+            HTML_ACESSO_INFORMACAO_CARDS,
+            "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/",
+            secoes,
+            modulo="acesso_informacao",
+        )
+
+        assert len(resultados) == 11
+        for resultado in resultados:
+            assert resultado.status == StatusValidacao.CONFORME
+            assert 'encontrada como card/botão de navegação' in resultado.evidencia
 
 
 # ---------------------------------------------------------------------------
@@ -796,6 +923,22 @@ class TestSelecaoUrlPrincipalModulo:
         )
         assert selecao["url"] == "https://www.prefeitura.sp.gov.br/participacao-social"
 
+    def test_acesso_informacao_prefere_slug_exato_ao_invés_de_cmai(self):
+        from app.reports.report_builder import selecionar_url_principal_modulo
+
+        selecao = selecionar_url_principal_modulo(
+            HTML_ACESSO_CONTROLADORIA_COM_CMAI,
+            "https://www.prefeitura.sp.gov.br/web/controladoria_geral/",
+            "acesso_informacao",
+            "Acesso à Informação",
+        )
+
+        assert (
+            selecao["url"]
+            == "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/"
+        )
+        assert "slug exato do módulo" in selecao["motivo"]
+
 
 class TestSubpaginasObrigatoriasAcessoInformacao:
     def test_descobre_links_internos_e_ignora_externo(self):
@@ -837,6 +980,128 @@ class TestSubpaginasObrigatoriasAcessoInformacao:
         assert (
             descoberta["encontrados"][0]["url"]
             == "https://www.prefeitura.sp.gov.br/institucional/agenda-presidente"
+        )
+
+    def test_auditoria_consolida_subpaginas_descobertas_a_partir_do_card_institucional(self, monkeypatch):
+        from app.reports import report_builder as rb
+        from app.validators.base import StatusValidacao
+
+        url_inicial = "https://www.prefeitura.sp.gov.br/web/controladoria_geral/"
+        url_modulo = "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/"
+        url_institucional = (
+            "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/institucional"
+        )
+        paginas = {
+            url_inicial: HTML_ACESSO_CONTROLADORIA_COM_CMAI,
+            url_modulo: HTML_ACESSO_INFORMACAO_CARDS,
+            url_institucional: HTML_INSTITUCIONAL_CARD_SUBPAGINAS,
+            f"{url_institucional}/competencias": "<html><body><h1>Competências e Atribuições</h1></body></html>",
+            f"{url_institucional}/estrutura": "<html><body><h1>Organograma e Estrutura Administrativa</h1></body></html>",
+            f"{url_institucional}/servidores": "<html><body><h1>Lista de Servidores e Contatos</h1></body></html>",
+            f"{url_institucional}/agenda-presidente": "<html><body><h1>Agenda do Presidente</h1></body></html>",
+        }
+        paginas.update(
+            {
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/acoes": "<html><body><h1>Ações e Programas</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/perguntas": "<html><body><h1>Perguntas Frequentes</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/classificadas": "<html><body><h1>Informações Classificadas e Desclassificadas</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/sic": "<html><body><h1>Serviço de Informação ao Cidadão</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/auditorias": "<html><body><h1>Auditorias</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/compras": "<html><body><h1>Compras Públicas</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/contratos": "<html><body><h1>Contratos Administrativos</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/convenios": "<html><body><h1>Convênios e Parcerias</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/doacoes": "<html><body><h1>Doações, Comodatos, Brindes e Presentes</h1></body></html>",
+                "https://www.prefeitura.sp.gov.br/web/controladoria_geral/acesso_a_informacao/integridade": "<html><body><h1>Programa de Integridade e Boas Práticas</h1></body></html>",
+            }
+        )
+
+        def fake_buscar_html(url):
+            if url in paginas:
+                return paginas[url], None
+            return None, "url não simulada"
+
+        def fake_buscar_html_dinamico(url):
+            if url in paginas:
+                return paginas[url], None
+            return None, "url não simulada"
+
+        def fake_carregar_regra(_):
+            return {
+                "nome": "Acesso à Informação",
+                "pagina_inicial": {
+                    "botoes_obrigatorios": [{"texto": "Acesso à Informação", "obrigatorio": True}]
+                },
+                "pagina_principal": {
+                    "secoes_obrigatorias": [
+                        "Institucional",
+                        "Ações e Programas",
+                        "Perguntas Frequentes",
+                        "Informações Classificadas e Desclassificadas",
+                        "Serviço de Informação ao Cidadão",
+                        "Auditorias",
+                        "Compras Públicas",
+                        "Contratos Administrativos",
+                        "Convênios e Parcerias",
+                        "Doações, Comodatos, Brindes e Presentes",
+                        "Programa de Integridade e Boas Práticas",
+                    ]
+                },
+                "subpaginas_obrigatorias_institucional": [
+                    {"nome": "Competências e Atribuições", "aliases": ["Competências e Atribuições"]},
+                    {"nome": "Organograma e Estrutura Administrativa", "aliases": ["Organograma e Estrutura Administrativa"]},
+                    {"nome": "Lista de Servidores e Contatos", "aliases": ["Lista de Servidores e Contatos"]},
+                    {"nome": "Agenda da Autoridade", "aliases": ["Agenda da Autoridade", "Agenda do Presidente"]},
+                ],
+                "validacoes_gerais": {},
+            }
+
+        monkeypatch.setattr(rb, "buscar_html", fake_buscar_html)
+        monkeypatch.setattr(rb, "buscar_html_dinamico", fake_buscar_html_dinamico)
+        monkeypatch.setattr(rb, "_carregar_regra", fake_carregar_regra)
+
+        auditoria = rb.auditar_orgao(
+            url=url_inicial,
+            nome_orgao="Controladoria Geral do Município",
+            ano_referencia=2026,
+            modulos_ativos=["acesso_informacao"],
+            verificar_links=False,
+        )
+
+        assert auditoria["erros"] == []
+        selecao = auditoria["selecao_urls_modulos"]["acesso_informacao"]
+        assert selecao["url_principal"] == url_modulo
+        assert any(card["texto"] == "Institucional" for card in selecao["cards_encontrados"])
+        assert any(card["url"] == url_institucional for card in selecao["cards_com_link_interno"])
+
+        subpaginas = {item["url"]: item for item in auditoria["subpaginas_visitadas"]}
+        assert subpaginas[url_institucional]["origem"] == "card"
+        assert (
+            subpaginas[f"{url_institucional}/competencias"]["status"]
+            == StatusValidacao.CONFORME.value
+        )
+        assert (
+            subpaginas[f"{url_institucional}/estrutura"]["status"]
+            == StatusValidacao.CONFORME.value
+        )
+        assert (
+            subpaginas[f"{url_institucional}/servidores"]["status"]
+            == StatusValidacao.CONFORME.value
+        )
+        assert (
+            subpaginas[f"{url_institucional}/agenda-presidente"]["status"]
+            == StatusValidacao.CONFORME.value
+        )
+
+        resultado_institucional = next(
+            resultado
+            for resultado in auditoria["resultados"]["acesso_informacao"]
+            if resultado.descricao == 'Seção obrigatória: "Institucional"'
+        )
+        assert "card/botão de navegação" in resultado_institucional.evidencia
+        assert "Subpágina interna do card visitada" in resultado_institucional.evidencia
+        assert any(
+            "Subpágina acessada a partir do card" in evid
+            for evid in auditoria["evidencias_por_url"][url_institucional]
         )
 
 
