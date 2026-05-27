@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
 import pandas as pd
 import yaml
+from bs4 import BeautifulSoup
+from rapidfuzz import fuzz
 
 from app.config import RULES_DIR
 from app.crawler.fetcher import buscar_html
@@ -50,19 +53,141 @@ _MODULOS_NOMES = {
     "quadro_servicos": "Quadro de Serviços",
 }
 
+_MODULOS_SLUG = {
+    "acesso_informacao": "acesso-a-informacao",
+    "participacao_social": "participacao-social",
+    "quadro_servicos": "quadro-de-servicos",
+}
+
+_DOMINIOS_EXTERNOS_REJEITADOS = {
+    "transparencia.prefeitura.sp.gov.br",
+    "sp156.prefeitura.sp.gov.br",
+    "legislacao.prefeitura.sp.gov.br",
+    "www.planalto.gov.br",
+}
+
+
+def _normalizar_dominio(url: str) -> str:
+    dominio = urlparse(url).netloc.lower()
+    return dominio[4:] if dominio.startswith("www.") else dominio
+
+
+def _coletar_links_com_contexto(html: str, url_base: str) -> list[dict[str, Any]]:
+    soup = BeautifulSoup(html, "lxml")
+    links: list[dict[str, Any]] = []
+    dominio_base = _normalizar_dominio(url_base)
+
+    for ordem, tag in enumerate(soup.find_all("a", href=True), start=1):
+        href = tag["href"].strip()
+        href_absoluto = urljoin(url_base, href)
+        texto = tag.get_text(separator=" ", strip=True)
+        dominio_link = _normalizar_dominio(href_absoluto)
+        classes_tag = " ".join(tag.get("class", [])).lower()
+        classes_ancestrais = " ".join(
+            f"{p.get('id', '')} {' '.join(p.get('class', []))}".lower()
+            for p in tag.parents
+            if getattr(p, "name", None)
+        )
+        is_menu = any(
+            p.name in ("nav", "header") for p in tag.parents if getattr(p, "name", None)
+        )
+        is_card = any(k in classes_ancestrais for k in ("card", "bloco", "box", "tile"))
+        is_button = (
+            tag.get("role", "").lower() == "button"
+            or any(k in classes_tag for k in ("btn", "button", "botao", "cta"))
+            or any(k in classes_ancestrais for k in ("btn", "button", "botao", "cta"))
+        )
+        links.append(
+            {
+                "texto": texto,
+                "href": href,
+                "href_absoluto": href_absoluto,
+                "dominio": dominio_link,
+                "interno": dominio_link == dominio_base,
+                "is_menu": is_menu,
+                "is_card": is_card,
+                "is_button": is_button,
+                "ordem": ordem,
+            }
+        )
+    return links
+
+
+def selecionar_url_principal_modulo(
+    html: str,
+    url_base: str,
+    modulo: str,
+    texto_botao: str,
+) -> dict[str, Any]:
+    slug = _MODULOS_SLUG.get(modulo, "")
+    links = _coletar_links_com_contexto(html, url_base)
+    candidatos: list[dict[str, Any]] = []
+    for link in links:
+        texto = link.get("texto", "")
+        score_texto = fuzz.partial_ratio(texto_botao.lower(), texto.lower()) if texto else 0
+        slug_no_path = slug in urlparse(link["href_absoluto"]).path.lower()
+        if score_texto >= 80 or slug_no_path:
+            candidatos.append({**link, "score_texto": score_texto, "slug_no_path": slug_no_path})
+
+    internos = [c for c in candidatos if c["interno"]]
+    dominio_base = _normalizar_dominio(url_base)
+    externos_ignorados = []
+    for c in candidatos:
+        if c["interno"]:
+            continue
+        dominio = c.get("dominio", "")
+        motivo = (
+            f"domínio externo bloqueado ({dominio})"
+            if dominio in _DOMINIOS_EXTERNOS_REJEITADOS
+            else f"domínio diferente do avaliado ({dominio_base})"
+        )
+        externos_ignorados.append({"url": c["href_absoluto"], "motivo": motivo})
+
+    if not internos:
+        return {
+            "url": None,
+            "motivo": "Nenhuma URL interna encontrada para o módulo; apenas referências externas.",
+            "externos_ignorados": externos_ignorados,
+            "status": StatusValidacao.NAO_VERIFICADO.value,
+        }
+
+    internos_ordenados = sorted(
+        internos,
+        key=lambda c: (
+            1 if c["slug_no_path"] else 0,
+            1 if c["is_menu"] else 0,
+            1 if (c["is_card"] or c["is_button"]) else 0,
+            c["score_texto"],
+            -c["ordem"],
+        ),
+        reverse=True,
+    )
+    escolhido = internos_ordenados[0]
+    contexto = (
+        "menu principal"
+        if escolhido["is_menu"]
+        else "card/botão interno"
+        if (escolhido["is_card"] or escolhido["is_button"])
+        else "link interno da página"
+    )
+    motivo = (
+        f"URL interna priorizada ({contexto})"
+        + (" com slug do módulo no caminho." if escolhido["slug_no_path"] else ".")
+    )
+
+    return {
+        "url": escolhido["href_absoluto"],
+        "motivo": motivo,
+        "externos_ignorados": externos_ignorados,
+        "status": StatusValidacao.CONFORME.value,
+    }
+
 
 def _encontrar_url_botao(
-    html: str, url_base: str, texto_botao: str
-) -> str | None:
-    """Encontra a URL do botão na página inicial."""
-    from app.validators.button_validator import _encontrar_botao  # noqa: PLC0415
-    from app.crawler.parser import extrair_links, extrair_menu_botoes  # noqa: PLC0415
-
-    links_menu = extrair_menu_botoes(html, url_base)
-    todos_links = extrair_links(html, url_base)
-    combinado = links_menu + todos_links
-    _, _, href = _encontrar_botao(texto_botao, combinado)
-    return href or None
+    html: str, url_base: str, modulo: str, texto_botao: str
+) -> dict[str, Any]:
+    """Seleciona a URL principal do módulo com prioridade para links internos."""
+    return selecionar_url_principal_modulo(html, url_base, modulo, texto_botao)
 
 
 def auditar_orgao(
@@ -92,6 +217,7 @@ def auditar_orgao(
     resultados_por_modulo: dict[str, list[ResultadoCriterio]] = {}
     urls_visitadas: list[str] = [url]
     metodos_coleta: dict[str, str] = {}
+    selecao_urls_modulos: dict[str, dict[str, Any]] = {}
 
     def _progresso(msg: str):
         if callback_progresso:
@@ -130,6 +256,7 @@ def auditar_orgao(
             "urls_visitadas": urls_visitadas,
             "metodos_coleta": metodos_coleta,
             "modulos_ativos": modulos_ativos,
+            "selecao_urls_modulos": selecao_urls_modulos,
         }
 
     MAPA_REGRAS = {
@@ -156,7 +283,16 @@ def auditar_orgao(
 
         # 2. Acessar a página do módulo
         texto_botao = botoes_config[0]["texto"] if botoes_config else regra.get("nome", modulo)
-        url_pagina = _encontrar_url_botao(html_inicial, url, texto_botao)
+        selecao_url = _encontrar_url_botao(html_inicial, url, modulo, texto_botao)
+        url_pagina = selecao_url.get("url")
+        selecao_urls_modulos[modulo] = {
+            "modulo": modulo,
+            "nome": _MODULOS_NOMES.get(modulo, modulo),
+            "url_principal": url_pagina,
+            "motivo": selecao_url.get("motivo", ""),
+            "externos_ignorados": selecao_url.get("externos_ignorados", []),
+            "status": selecao_url.get("status", StatusValidacao.NAO_VERIFICADO.value),
+        }
 
         html_pagina = None
         if url_pagina:
@@ -221,8 +357,13 @@ def auditar_orgao(
                 ResultadoCriterio(
                     criterio_id=f"{modulo}_pagina_inacessivel",
                     descricao=f"Página do módulo {regra.get('nome', modulo)} acessível",
-                    status=StatusValidacao.NAO_CONFORME,
-                    evidencia=f"Não foi possível acessar a página do módulo.",
+                    status=StatusValidacao.NAO_VERIFICADO if not url_pagina else StatusValidacao.NAO_CONFORME,
+                    evidencia=(
+                        "Página principal do módulo não localizada no domínio avaliado; "
+                        "foram encontrados apenas links externos de referência."
+                        if not url_pagina
+                        else "Não foi possível acessar a página do módulo."
+                    ),
                     url=url_pagina or url,
                     modulo=modulo,
                 )
@@ -249,6 +390,7 @@ def auditar_orgao(
         "urls_visitadas": urls_visitadas,
         "metodos_coleta": metodos_coleta,
         "modulos_ativos": modulos_ativos,
+        "selecao_urls_modulos": selecao_urls_modulos,
     }
 
 

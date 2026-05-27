@@ -68,6 +68,7 @@ def exportar_html(
         tabela_html=tabela_html,
         urls_visitadas=auditoria.get("urls_visitadas", []),
         metodos_coleta=auditoria.get("metodos_coleta", {}),
+        selecao_urls_modulos=auditoria.get("selecao_urls_modulos", {}),
         modulos_avaliados=[
             m.replace("_", " ").title()
             for m in auditoria.get("modulos_ativos", [])

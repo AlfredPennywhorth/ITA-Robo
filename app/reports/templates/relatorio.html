@@ -101,6 +101,44 @@
     </div>
     {% endif %}
 
+    {% if selecao_urls_modulos %}
+    <h2>Seleção de URL Principal por Módulo</h2>
+    <div class="meta">
+      <table style="width:100%">
+        <tr style="background:#e3f2fd;">
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Módulo</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">URL principal escolhida</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Motivo da escolha</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Links externos ignorados</th>
+        </tr>
+        {% for _, info in selecao_urls_modulos.items() %}
+        <tr>
+          <td style="padding:6px 12px;">{{ info.nome }}</td>
+          <td style="padding:6px 12px;word-break:break-all;">
+            {% if info.url_principal %}
+            <a href="{{ info.url_principal }}" target="_blank">{{ info.url_principal }}</a>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td style="padding:6px 12px;">{{ info.motivo }}</td>
+          <td style="padding:6px 12px;">
+            {% if info.externos_ignorados %}
+              <ul style="margin:0;padding-left:18px;">
+                {% for externo in info.externos_ignorados %}
+                <li><a href="{{ externo.url }}" target="_blank">{{ externo.url }}</a> — {{ externo.motivo }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endif %}
+
     <h2>Detalhamento por Critério</h2>
     {{ tabela_html }}
 
