@@ -44,6 +44,13 @@ def _buscar_html_com_fallback(url: str) -> tuple[str | None, str | None, bool]:
     return html, erro, True
 
 
+_MODULOS_NOMES = {
+    "acesso_informacao": "Acesso à Informação",
+    "participacao_social": "Participação Social",
+    "quadro_servicos": "Quadro de Serviços",
+}
+
+
 def _encontrar_url_botao(
     html: str, url_base: str, texto_botao: str
 ) -> str | None:
@@ -65,6 +72,9 @@ def auditar_orgao(
     modulos_ativos: list[str],
     usar_playwright: bool = False,
     callback_progresso=None,
+    verificar_links: bool = True,
+    timeout_pagina: int = 15,
+    max_paginas: int = 20,
 ) -> dict[str, Any]:
     """Executa a auditoria completa de um órgão.
 
@@ -74,22 +84,38 @@ def auditar_orgao(
       - pontuacoes: dict[modulo -> float]
       - pontuacao_geral: float
       - erros: list[str]
+      - urls_visitadas: list[str]
+      - metodos_coleta: dict[url -> str]
+      - modulos_ativos: list[str]
     """
     erros: list[str] = []
     resultados_por_modulo: dict[str, list[ResultadoCriterio]] = {}
+    urls_visitadas: list[str] = [url]
+    metodos_coleta: dict[str, str] = {}
 
     def _progresso(msg: str):
         if callback_progresso:
             callback_progresso(msg)
 
+    def _buscar_e_rastrear(target_url: str) -> tuple[str | None, str | None]:
+        """Busca HTML rastreando URL e método de coleta usados."""
+        if target_url not in urls_visitadas:
+            urls_visitadas.append(target_url)
+        if usar_playwright:
+            html, erro = buscar_html_dinamico(target_url)
+            metodos_coleta[target_url] = "Playwright"
+            return html, erro
+        html, erro = buscar_html(target_url)
+        if html:
+            metodos_coleta[target_url] = "requests"
+            return html, None
+        html, erro_pw = buscar_html_dinamico(target_url)
+        metodos_coleta[target_url] = "Playwright (fallback automático)"
+        return html, erro_pw if not html else None
+
     _progresso(f"Acessando página inicial: {url}")
 
-    if usar_playwright:
-        html_inicial, erro_inicial, _ = buscar_html_dinamico(url), None, True
-        if isinstance(html_inicial, tuple):
-            html_inicial, erro_inicial = html_inicial
-    else:
-        html_inicial, erro_inicial, _ = _buscar_html_com_fallback(url)
+    html_inicial, erro_inicial = _buscar_e_rastrear(url)
 
     if not html_inicial:
         erros.append(f"Falha ao acessar página inicial: {erro_inicial}")
@@ -101,6 +127,9 @@ def auditar_orgao(
             "pontuacoes": {},
             "pontuacao_geral": 0.0,
             "erros": erros,
+            "urls_visitadas": urls_visitadas,
+            "metodos_coleta": metodos_coleta,
+            "modulos_ativos": modulos_ativos,
         }
 
     MAPA_REGRAS = {
@@ -132,7 +161,7 @@ def auditar_orgao(
         html_pagina = None
         if url_pagina:
             _progresso(f"Acessando: {url_pagina}")
-            html_pagina, erro_pg, _ = _buscar_html_com_fallback(url_pagina)
+            html_pagina, erro_pg = _buscar_e_rastrear(url_pagina)
             if erro_pg:
                 erros.append(f"[{modulo}] Falha ao acessar {url_pagina}: {erro_pg}")
 
@@ -155,8 +184,10 @@ def auditar_orgao(
                 resultados_modulo.append(r_formato)
 
             # 6. Validar links quebrados
-            if validacoes.get("verificar_links_quebrados"):
-                r_links = validar_links_quebrados(html_pagina, url_pagina, modulo=modulo)
+            if verificar_links and validacoes.get("verificar_links_quebrados"):
+                r_links = validar_links_quebrados(
+                    html_pagina, url_pagina, modulo=modulo, timeout=timeout_pagina
+                )
                 resultados_modulo.append(r_links)
 
             # 7. Validar legislação oficial
@@ -204,6 +235,9 @@ def auditar_orgao(
         "pontuacoes": pontuacoes,
         "pontuacao_geral": pontuacao_geral,
         "erros": erros,
+        "urls_visitadas": urls_visitadas,
+        "metodos_coleta": metodos_coleta,
+        "modulos_ativos": modulos_ativos,
     }
 
 

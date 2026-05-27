@@ -12,11 +12,12 @@ from app.validators.base import ResultadoCriterio, StatusValidacao
 
 
 def validar_links_quebrados(
-    html: str, url_base: str, modulo: str = "", max_links: int = 30
+    html: str, url_base: str, modulo: str = "", max_links: int = 30, timeout: int = REQUEST_TIMEOUT
 ) -> ResultadoCriterio:
     """Verifica se há links quebrados (status HTTP 4xx/5xx).
 
     Limita a verificação a max_links links para não sobrecarregar.
+    O parâmetro timeout controla o tempo máximo de espera por link (segundos).
     """
     links = extrair_links(html, url_base)[:max_links]
     quebrados: list[str] = []
@@ -28,7 +29,7 @@ def validar_links_quebrados(
             continue
         try:
             resp = requests.head(
-                href, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT, allow_redirects=True
+                href, headers=REQUEST_HEADERS, timeout=timeout, allow_redirects=True
             )
             if resp.status_code >= 400:
                 quebrados.append(f"{href} (HTTP {resp.status_code})")

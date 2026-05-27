@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: ita-robo
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      playwright install chromium --with-deps
+    startCommand: >
+      streamlit run app/main.py
+      --server.address 0.0.0.0
+      --server.port $PORT
+      --server.headless true
+    envVars:
+      - key: ITA_ROBO_APP_PASSWORD
+        sync: false

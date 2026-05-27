@@ -110,6 +110,61 @@ streamlit run app/main.py
 
 ---
 
+## Deploy em Produção
+
+### Opção A — Streamlit Community Cloud
+
+1. Faça um fork ou push do repositório para seu GitHub.
+2. Acesse [share.streamlit.io](https://share.streamlit.io) e conecte o repositório.
+3. Defina `app/main.py` como arquivo principal.
+4. Para proteger o acesso, adicione nas **Secrets** da aplicação:
+   ```toml
+   ITA_ROBO_APP_PASSWORD = "sua-senha-aqui"
+   ```
+5. O arquivo `packages.txt` garante a instalação automática das dependências do Playwright.
+6. Após o deploy, execute `playwright install chromium` via **terminal da nuvem** (se disponível) ou use a opção de pós-build nas configurações avançadas.
+
+> **Nota sobre Playwright no Streamlit Cloud:** como o Playwright requer um binário do Chromium, é recomendado testar a coleta com `requests` primeiro. Se o site precisar de JavaScript, utilize o **fallback Playwright** marcando a opção na interface.
+
+### Opção B — Docker (Render, Railway, Fly.io, VPS)
+
+```bash
+# Construir a imagem
+docker build -t ita-robo .
+
+# Rodar o container
+docker run -p 8501:8501 \
+  -e ITA_ROBO_APP_PASSWORD="sua-senha-aqui" \
+  ita-robo
+```
+
+Acesse em `http://localhost:8501`.
+
+#### Deploy no Render
+
+1. Conecte o repositório ao [Render](https://render.com).
+2. O arquivo `render.yaml` já define o serviço automaticamente.
+3. Defina a variável `ITA_ROBO_APP_PASSWORD` no painel do Render (Environment > Add Environment Variable).
+
+#### Variável de Ambiente de Segurança
+
+| Variável | Descrição | Obrigatório |
+|---|---|---|
+| `ITA_ROBO_APP_PASSWORD` | Senha de acesso à interface web | Não (se ausente, o app fica aberto) |
+
+---
+
+## ⚠️ Persistência de Dados
+
+Os relatórios Excel/HTML e os manuais PDF são salvos em:
+- `data/resultados/` — relatórios gerados
+- `data/manuais/` — manuais PDF enviados
+- `data/ita_robo.db` — banco SQLite com histórico
+
+**Em plataformas sem volume persistente** (Streamlit Cloud, Render free tier), esses arquivos são perdidos ao reiniciar o container. **Sempre baixe os relatórios imediatamente após a avaliação** usando os botões "📥 Baixar Excel" e "📄 Baixar HTML" na interface.
+
+---
+
 ## Como Usar os Manuais em PDF
 
 O sistema permite armazenar os manuais vigentes (e suas atualizações futuras) diretamente na interface:
@@ -144,7 +199,11 @@ pagina_principal:
 ## Executar os Testes
 
 ```bash
+# Testes básicos
 pytest tests/ -v
+
+# Com cobertura de código
+pytest tests/ -v --cov=app --cov-report=term-missing
 ```
 
 ---

@@ -66,6 +66,12 @@ def exportar_html(
         pontuacoes=pontuacoes_pct,
         erros=auditoria.get("erros", []),
         tabela_html=tabela_html,
+        urls_visitadas=auditoria.get("urls_visitadas", []),
+        metodos_coleta=auditoria.get("metodos_coleta", {}),
+        modulos_avaliados=[
+            m.replace("_", " ").title()
+            for m in auditoria.get("modulos_ativos", [])
+        ],
     )
 
 

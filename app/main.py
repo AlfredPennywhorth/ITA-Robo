@@ -29,6 +29,22 @@ st.set_page_config(
     layout="wide",
 )
 
+# ---------------------------------------------------------------------------
+# Proteção por senha (opcional via variável de ambiente ITA_ROBO_APP_PASSWORD)
+# ---------------------------------------------------------------------------
+_senha_configurada = os.environ.get("ITA_ROBO_APP_PASSWORD", "")
+if _senha_configurada and not st.session_state.get("autenticado"):
+    st.title("🔐 Acesso Restrito")
+    st.markdown("Informe a senha de acesso para continuar.")
+    senha_input = st.text_input("Senha", type="password", key="senha_input")
+    if st.button("Entrar", type="primary"):
+        if senha_input == _senha_configurada:
+            st.session_state["autenticado"] = True
+            st.rerun()
+        else:
+            st.error("Senha incorreta. Tente novamente.")
+    st.stop()
+
 MODULOS_NOMES = {
     "acesso_informacao": "Acesso à Informação",
     "participacao_social": "Participação Social",
@@ -82,6 +98,31 @@ if pagina == "Avaliação Individual":
         with col_m3:
             verificar_qs = st.checkbox("Quadro de Serviços", value=True)
 
+        st.markdown("**Configurações de coleta:**")
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1:
+            verificar_links = st.checkbox(
+                "Verificar links quebrados",
+                value=True,
+                help="Desmarque para acelerar a avaliação. Links não serão verificados.",
+            )
+        with col_c2:
+            timeout_pagina = st.slider(
+                "Timeout por página (s)",
+                min_value=5,
+                max_value=60,
+                value=15,
+                help="Tempo máximo de espera por página e por link verificado.",
+            )
+        with col_c3:
+            max_paginas = st.number_input(
+                "Máximo de páginas",
+                min_value=1,
+                max_value=100,
+                value=20,
+                help="Limite de páginas a visitar por módulo (aplicável a crawling futuro).",
+            )
+
         executar = st.form_submit_button("▶ Executar Avaliação", type="primary")
 
     if executar:
@@ -116,6 +157,9 @@ if pagina == "Avaliação Individual":
                         modulos_ativos=modulos_ativos,
                         usar_playwright=usar_playwright,
                         callback_progresso=progresso,
+                        verificar_links=verificar_links,
+                        timeout_pagina=int(timeout_pagina),
+                        max_paginas=int(max_paginas),
                     )
                     barra.progress(1.0)
 
@@ -136,6 +180,17 @@ if pagina == "Avaliação Individual":
                 for i, (mod, nota) in enumerate(auditoria["pontuacoes"].items(), start=1):
                     with cols[i]:
                         st.metric(MODULOS_NOMES.get(mod, mod), f"{nota:.1f}%")
+
+                # URLs visitadas
+                urls_vis = auditoria.get("urls_visitadas", [])
+                metodos = auditoria.get("metodos_coleta", {})
+                if urls_vis:
+                    with st.expander("🔗 URLs visitadas e método de coleta", expanded=False):
+                        dados_urls = [
+                            {"URL": u, "Método de Coleta": metodos.get(u, "—")}
+                            for u in urls_vis
+                        ]
+                        st.table(dados_urls)
 
                 # Tabela de critérios
                 if not df.empty:

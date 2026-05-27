@@ -54,6 +54,9 @@
         <tr><td>URL Analisada</td><td><a href="{{ url }}" target="_blank">{{ url }}</a></td></tr>
         <tr><td>Ano de Referência</td><td>{{ ano_referencia }}</td></tr>
         <tr><td>Data da Verificação</td><td>{{ data_verificacao }}</td></tr>
+        {% if modulos_avaliados %}
+        <tr><td>Módulos Avaliados</td><td>{{ modulos_avaliados | join(', ') }}</td></tr>
+        {% endif %}
       </table>
     </div>
 
@@ -77,6 +80,24 @@
       <ul>
         {% for erro in erros %}<li>{{ erro }}</li>{% endfor %}
       </ul>
+    </div>
+    {% endif %}
+
+    {% if urls_visitadas %}
+    <h2>URLs Visitadas</h2>
+    <div class="meta">
+      <table style="width:100%">
+        <tr style="background:#e3f2fd;">
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">URL</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Método de Coleta</th>
+        </tr>
+        {% for url_v in urls_visitadas %}
+        <tr>
+          <td style="padding:6px 12px;word-break:break-all;"><a href="{{ url_v }}" target="_blank">{{ url_v }}</a></td>
+          <td style="padding:6px 12px;">{{ metodos_coleta.get(url_v, '—') }}</td>
+        </tr>
+        {% endfor %}
+      </table>
     </div>
     {% endif %}
 

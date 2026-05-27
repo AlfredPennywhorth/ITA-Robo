@@ -15,8 +15,8 @@ build/
 venv/
 env/
 
-# Streamlit
-.streamlit/
+# Streamlit — ignorar apenas secrets, não a configuração geral
+.streamlit/secrets.toml
 
 # Banco de dados local
 data/ita_robo.db
