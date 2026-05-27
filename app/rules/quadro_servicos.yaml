@@ -1,0 +1,26 @@
+modulo: quadro_servicos
+nome: "Quadro de Serviços"
+
+pagina_inicial:
+  botoes_obrigatorios:
+    - texto: "Quadro de Serviços"
+      obrigatorio: true
+      posicao_esperada: 3
+
+pagina_principal:
+  secoes_obrigatorias:
+    - "Apresentação"
+    - "Lista de Serviços"
+    - "Lista de Equipamentos"
+
+validacoes:
+  exigir_data_atualizacao: true
+  exigir_texto_padrao_apresentacao: true
+  exigir_lista_servicos: true
+  exigir_links_sp156_quando_houver_servicos: true
+  exigir_lista_equipamentos_ou_frase_negativa: true
+  verificar_links_quebrados: true
+  exigir_formato_aberto_downloads: true
+  dominio_legislacao_oficial:
+    - "legislacao.prefeitura.sp.gov.br"
+    - "www.planalto.gov.br"
