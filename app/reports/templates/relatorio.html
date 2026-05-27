@@ -139,6 +139,59 @@
     </div>
     {% endif %}
 
+    {% if subpaginas_visitadas %}
+    <h2>Subpáginas Visitadas</h2>
+    <div class="meta">
+      <table style="width:100%">
+        <tr style="background:#e3f2fd;">
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Módulo</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Subpágina</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Status</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">URL</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:bold;color:#1565c0;">Evidência</th>
+        </tr>
+        {% for sub in subpaginas_visitadas %}
+        <tr>
+          <td style="padding:6px 12px;">{{ sub.modulo }}</td>
+          <td style="padding:6px 12px;">{{ sub.nome }}</td>
+          <td style="padding:6px 12px;">{{ sub.status }}</td>
+          <td style="padding:6px 12px;word-break:break-all;"><a href="{{ sub.url }}" target="_blank">{{ sub.url }}</a></td>
+          <td style="padding:6px 12px;">{{ sub.evidencia }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endif %}
+
+    {% if subpaginas_esperadas_nao_encontradas %}
+    <h2>Subpáginas Esperadas Não Encontradas</h2>
+    <div class="meta">
+      <ul>
+        {% for sub in subpaginas_esperadas_nao_encontradas %}
+        <li><strong>{{ sub.modulo }}</strong>: {{ sub.nome }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if evidencias_por_url %}
+    <h2>Evidência por URL</h2>
+    <div class="meta">
+      <ul>
+        {% for url_evid, evidencias in evidencias_por_url.items() %}
+        <li>
+          <a href="{{ url_evid }}" target="_blank">{{ url_evid }}</a>
+          <ul>
+            {% for evidencia in evidencias %}
+            <li>{{ evidencia }}</li>
+            {% endfor %}
+          </ul>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
     <h2>Detalhamento por Critério</h2>
     {{ tabela_html }}
 

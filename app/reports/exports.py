@@ -10,7 +10,12 @@ import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 
 
-def exportar_excel(df: pd.DataFrame, nome_orgao: str, ano: int) -> bytes:
+def exportar_excel(
+    df: pd.DataFrame,
+    nome_orgao: str,
+    ano: int,
+    auditoria: dict | None = None,
+) -> bytes:
     """Gera arquivo Excel em memória e retorna bytes."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -27,6 +32,35 @@ def exportar_excel(df: pd.DataFrame, nome_orgao: str, ano: int) -> bytes:
             resumo.columns = ["Módulo", "Pontuação Média", "Critérios Avaliados"]
             resumo["Pontuação Média (%)"] = (resumo["Pontuação Média"] * 100).round(1)
             resumo.to_excel(writer, index=False, sheet_name="Resumo por Módulo")
+
+        if auditoria:
+            subpaginas = auditoria.get("subpaginas_visitadas", [])
+            if subpaginas:
+                pd.DataFrame(subpaginas).to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="Subpáginas Visitadas",
+                )
+
+            subpaginas_nao = auditoria.get("subpaginas_esperadas_nao_encontradas", [])
+            if subpaginas_nao:
+                pd.DataFrame(subpaginas_nao).to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="Subpáginas Não Encontradas",
+                )
+
+            evidencias_por_url = auditoria.get("evidencias_por_url", {})
+            if evidencias_por_url:
+                linhas_evidencias = [
+                    {"url": url, "evidencias": " | ".join(evidencias)}
+                    for url, evidencias in evidencias_por_url.items()
+                ]
+                pd.DataFrame(linhas_evidencias).to_excel(
+                    writer,
+                    index=False,
+                    sheet_name="Evidências por URL",
+                )
 
     return output.getvalue()
 
@@ -69,6 +103,9 @@ def exportar_html(
         urls_visitadas=auditoria.get("urls_visitadas", []),
         metodos_coleta=auditoria.get("metodos_coleta", {}),
         selecao_urls_modulos=auditoria.get("selecao_urls_modulos", {}),
+        subpaginas_visitadas=auditoria.get("subpaginas_visitadas", []),
+        subpaginas_esperadas_nao_encontradas=auditoria.get("subpaginas_esperadas_nao_encontradas", []),
+        evidencias_por_url=auditoria.get("evidencias_por_url", {}),
         modulos_avaliados=[
             m.replace("_", " ").title()
             for m in auditoria.get("modulos_ativos", [])
@@ -97,7 +134,14 @@ def salvar_resultados(
     # Excel
     caminho_excel = os.path.join(diretorio_saida, f"relatorio_{nome_base}_{timestamp}.xlsx")
     with open(caminho_excel, "wb") as f:
-        f.write(exportar_excel(df, auditoria.get("nome_orgao", ""), auditoria.get("ano_referencia", 0)))
+        f.write(
+            exportar_excel(
+                df,
+                auditoria.get("nome_orgao", ""),
+                auditoria.get("ano_referencia", 0),
+                auditoria=auditoria,
+            )
+        )
     arquivos["excel"] = caminho_excel
 
     # HTML

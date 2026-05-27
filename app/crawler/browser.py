@@ -17,6 +17,16 @@ _CONTEXTO_FECHADO_MSGS = (
     "Target closed",
 )
 
+_RESOURCE_TYPES_BLOQUEADOS = {"image", "media", "font", "stylesheet"}
+_TRACKING_PATTERNS = (
+    "google-analytics.com",
+    "googletagmanager.com",
+    "doubleclick.net",
+    "facebook.net",
+    "hotjar.com",
+    "/gtm.js",
+)
+
 
 def _garantir_chromium() -> str | None:
     """Instala o Chromium do Playwright se ainda não estiver disponível.
@@ -65,17 +75,28 @@ def _contexto_fechado(exc: Exception) -> bool:
     return any(m in msg for m in _CONTEXTO_FECHADO_MSGS)
 
 
-def _navegar_resiliente(page, url: str, PWTimeout) -> None:  # noqa: N803
+def _navegar_resiliente(page, url: str) -> None:
     """Navega para a URL com estratégia resiliente.
 
-    1ª tentativa: domcontentloaded (mais tolerante a scripts lentos).
+    Usa apenas domcontentloaded (mais tolerante a scripts lentos).
     Aguarda 2 s adicionais para carregamento parcial de JS.
-    Networkidle é tentado opcionalmente — falhas são ignoradas.
     """
     page.goto(url, wait_until="domcontentloaded", timeout=30_000)
     page.wait_for_timeout(2_000)
-    with contextlib.suppress(PWTimeout, Exception):
-        page.wait_for_load_state("networkidle", timeout=5_000)
+
+
+def _configurar_bloqueio_recursos(page) -> None:  # noqa: ANN001
+    def _interceptar(route, request):  # noqa: ANN001
+        req_url = request.url.lower()
+        if request.resource_type in _RESOURCE_TYPES_BLOQUEADOS:
+            route.abort()
+            return
+        if any(padrao in req_url for padrao in _TRACKING_PATTERNS):
+            route.abort()
+            return
+        route.continue_()
+
+    page.route("**/*", _interceptar)
 
 
 def buscar_html_dinamico(url: str) -> tuple[str | None, str | None]:
@@ -106,8 +127,9 @@ def buscar_html_dinamico(url: str) -> tuple[str | None, str | None]:
                 )
             )
             page = context.new_page()
+            _configurar_bloqueio_recursos(page)
             try:
-                _navegar_resiliente(page, url, PWTimeout)
+                _navegar_resiliente(page, url)
             except PWTimeout:
                 return None, f"Timeout (Playwright) ao acessar {url}"
             html = page.content()
@@ -178,7 +200,8 @@ def capturar_screenshot(url: str, caminho_arquivo: str) -> str | None:
                     )
                 )
                 page = context.new_page()
-                _navegar_resiliente(page, url, PWTimeout)
+                _configurar_bloqueio_recursos(page)
+                _navegar_resiliente(page, url)
                 page.screenshot(path=caminho_arquivo, full_page=True)
             return None
         except Exception as exc:  # noqa: BLE001

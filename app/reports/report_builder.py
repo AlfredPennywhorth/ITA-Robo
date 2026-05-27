@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
 from urllib.parse import urljoin, urlparse
+import unicodedata
 
 import pandas as pd
 import yaml
@@ -66,6 +68,14 @@ _DOMINIOS_EXTERNOS_REJEITADOS = {
     "www.planalto.gov.br",
 }
 
+_STATUS_PRIORIDADE = {
+    StatusValidacao.CONFORME.value: 4,
+    StatusValidacao.PARCIAL.value: 3,
+    StatusValidacao.NAO_CONFORME.value: 2,
+    StatusValidacao.NAO_VERIFICADO.value: 1,
+    StatusValidacao.NAO_APLICAVEL.value: 0,
+}
+
 
 def _normalizar_dominio(url: str) -> str:
     dominio = urlparse(url).netloc.lower()
@@ -111,6 +121,115 @@ def _coletar_links_com_contexto(html: str, url_base: str) -> list[dict[str, Any]
             }
         )
     return links
+
+
+def _normalizar_texto_busca(texto: str) -> str:
+    texto_nfkd = unicodedata.normalize("NFKD", texto)
+    sem_acentos = "".join(ch for ch in texto_nfkd if not unicodedata.combining(ch))
+    return " ".join(sem_acentos.lower().split())
+
+
+def _resolve_entrada_secao(entrada: Any) -> tuple[str, list[str]]:
+    if isinstance(entrada, dict):
+        nome = entrada.get("nome", "")
+        aliases = entrada.get("aliases", [nome])
+        termos = [a for a in aliases if isinstance(a, str) and a.strip()]
+        return nome, termos or [nome]
+    if isinstance(entrada, str):
+        return entrada, [entrada]
+    return str(entrada), [str(entrada)]
+
+
+def _score_correspondencia_link(texto_link: str, termo: str) -> int:
+    texto_norm = _normalizar_texto_busca(texto_link)
+    termo_norm = _normalizar_texto_busca(termo)
+    if not texto_norm or not termo_norm:
+        return 0
+    if termo_norm in texto_norm or texto_norm in termo_norm:
+        return 100
+    return int(fuzz.partial_ratio(termo_norm, texto_norm))
+
+
+def _descobrir_subpaginas_obrigatorias(
+    html: str,
+    url_pagina: str,
+    subpaginas_obrigatorias: list[Any],
+) -> dict[str, Any]:
+    links = _coletar_links_com_contexto(html, url_pagina)
+    encontrados: list[dict[str, str]] = []
+    nao_encontrados: list[dict[str, str]] = []
+    urls_ja_escolhidas: set[str] = set()
+
+    for entrada in subpaginas_obrigatorias:
+        nome_display, termos = _resolve_entrada_secao(entrada)
+        melhor_link = None
+        melhor_score = 0
+
+        for link in links:
+            if not link.get("interno"):
+                continue
+            href = link["href_absoluto"]
+            if href in urls_ja_escolhidas:
+                continue
+            if href == url_pagina:
+                continue
+
+            score = max((_score_correspondencia_link(link.get("texto", ""), termo) for termo in termos), default=0)
+            if score < 80:
+                continue
+            if score > melhor_score:
+                melhor_score = score
+                melhor_link = link
+
+        if melhor_link:
+            href = melhor_link["href_absoluto"]
+            urls_ja_escolhidas.add(href)
+            encontrados.append({"nome": nome_display, "url": href})
+        else:
+            nao_encontrados.append({"nome": nome_display})
+
+    return {"encontrados": encontrados, "nao_encontrados": nao_encontrados}
+
+
+def _validar_secoes_em_paginas(
+    paginas: list[dict[str, str]],
+    secoes: list[Any],
+    modulo: str,
+) -> list[ResultadoCriterio]:
+    resultados: list[ResultadoCriterio] = []
+    for secao in secoes:
+        melhor: ResultadoCriterio | None = None
+        melhor_url = ""
+        for pagina in paginas:
+            resultado_pagina = validar_secoes(
+                pagina["html"],
+                pagina["url"],
+                [secao],
+                modulo=modulo,
+            )[0]
+            prioridade = _STATUS_PRIORIDADE[resultado_pagina.status.value]
+            prioridade_melhor = _STATUS_PRIORIDADE[melhor.status.value] if melhor else -1
+            if prioridade > prioridade_melhor:
+                melhor = resultado_pagina
+                melhor_url = pagina["url"]
+
+            if resultado_pagina.status == StatusValidacao.CONFORME:
+                break
+
+        if melhor is None:
+            continue
+        if melhor_url != paginas[0]["url"] and melhor.status in (
+            StatusValidacao.CONFORME,
+            StatusValidacao.PARCIAL,
+        ):
+            melhor.evidencia = f"Critério encontrado em subpágina ({melhor_url}). {melhor.evidencia}"
+        resultados.append(melhor)
+    return resultados
+
+
+def _html_suficiente(html: str) -> bool:
+    texto = BeautifulSoup(html, "lxml").get_text(separator=" ", strip=True)
+    return len(texto) >= 120 and ("<a " in html.lower() or "<h" in html.lower())
 
 
 def selecionar_url_principal_modulo(
@@ -218,6 +337,9 @@ def auditar_orgao(
     urls_visitadas: list[str] = [url]
     metodos_coleta: dict[str, str] = {}
     selecao_urls_modulos: dict[str, dict[str, Any]] = {}
+    subpaginas_visitadas: list[dict[str, str]] = []
+    subpaginas_esperadas_nao_encontradas: list[dict[str, str]] = []
+    evidencias_por_url: dict[str, list[str]] = defaultdict(list)
 
     def _progresso(msg: str):
         if callback_progresso:
@@ -227,17 +349,39 @@ def auditar_orgao(
         """Busca HTML rastreando URL e método de coleta usados."""
         if target_url not in urls_visitadas:
             urls_visitadas.append(target_url)
-        if usar_playwright:
-            html, erro = buscar_html_dinamico(target_url)
-            metodos_coleta[target_url] = "Playwright"
-            return html, erro
+
         html, erro = buscar_html(target_url)
         if html:
-            metodos_coleta[target_url] = "requests"
-            return html, None
-        html, erro_pw = buscar_html_dinamico(target_url)
+            if not usar_playwright or _html_suficiente(html):
+                metodos_coleta[target_url] = "requests"
+                return html, None
+            metodos_coleta[target_url] = "requests (conteúdo insuficiente)"
+        if usar_playwright:
+            html_pw, erro_pw = buscar_html_dinamico(target_url)
+            if html_pw:
+                metodos_coleta[target_url] = "Playwright"
+                return html_pw, None
+
+            if erro_pw and "contexto Playwright fechado" in erro_pw:
+                html_retry, erro_retry = buscar_html(target_url)
+                if html_retry:
+                    metodos_coleta[target_url] = "requests (fallback pós-falha Playwright)"
+                    return html_retry, None
+                return None, erro_retry or erro_pw
+            return None, erro_pw
+
+        html_pw, erro_pw = buscar_html_dinamico(target_url)
+        if html_pw:
+            metodos_coleta[target_url] = "Playwright (fallback automático)"
+            return html_pw, None
+        if erro_pw and "contexto Playwright fechado" in erro_pw:
+            html_retry, erro_retry = buscar_html(target_url)
+            if html_retry:
+                metodos_coleta[target_url] = "requests (retry pós-falha Playwright)"
+                return html_retry, None
+            return None, erro_retry or erro_pw
         metodos_coleta[target_url] = "Playwright (fallback automático)"
-        return html, erro_pw if not html else None
+        return None, erro_pw
 
     _progresso(f"Acessando página inicial: {url}")
 
@@ -257,6 +401,9 @@ def auditar_orgao(
             "metodos_coleta": metodos_coleta,
             "modulos_ativos": modulos_ativos,
             "selecao_urls_modulos": selecao_urls_modulos,
+            "subpaginas_visitadas": subpaginas_visitadas,
+            "subpaginas_esperadas_nao_encontradas": subpaginas_esperadas_nao_encontradas,
+            "evidencias_por_url": dict(evidencias_por_url),
         }
 
     MAPA_REGRAS = {
@@ -302,10 +449,69 @@ def auditar_orgao(
                 erros.append(f"[{modulo}] Falha ao acessar {url_pagina}: {erro_pg}")
 
         if html_pagina:
+            paginas_validacao = [{"url": url_pagina, "html": html_pagina}]
+
+            if modulo == "acesso_informacao":
+                subpaginas_cfg = regra.get("subpaginas_obrigatorias_institucional", [])
+                descoberta = _descobrir_subpaginas_obrigatorias(
+                    html_pagina,
+                    url_pagina,
+                    subpaginas_cfg,
+                )
+                for faltante in descoberta["nao_encontrados"]:
+                    subpaginas_esperadas_nao_encontradas.append(
+                        {"modulo": modulo, "nome": faltante["nome"]}
+                    )
+
+                for subpagina in descoberta["encontrados"]:
+                    url_sub = subpagina["url"]
+                    html_sub, erro_sub = _buscar_e_rastrear(url_sub)
+                    if html_sub:
+                        paginas_validacao.append({"url": url_sub, "html": html_sub})
+                        subpaginas_visitadas.append(
+                            {
+                                "modulo": modulo,
+                                "nome": subpagina["nome"],
+                                "url": url_sub,
+                                "status": StatusValidacao.CONFORME.value,
+                                "evidencia": "Subpágina obrigatória acessada com sucesso.",
+                            }
+                        )
+                    else:
+                        msg_falha = "Subpágina não acessível no momento da avaliação"
+                        subpaginas_visitadas.append(
+                            {
+                                "modulo": modulo,
+                                "nome": subpagina["nome"],
+                                "url": url_sub,
+                                "status": StatusValidacao.NAO_VERIFICADO.value,
+                                "evidencia": msg_falha,
+                            }
+                        )
+                        resultados_modulo.append(
+                            ResultadoCriterio(
+                                criterio_id=(
+                                    "subpagina_obrigatoria_"
+                                    f"{subpagina['nome'].lower().replace(' ', '_')[:30]}"
+                                ),
+                                descricao=f'Subpágina obrigatória: "{subpagina["nome"]}"',
+                                status=StatusValidacao.NAO_VERIFICADO,
+                                evidencia=msg_falha,
+                                url=url_sub,
+                                modulo=modulo,
+                            )
+                        )
+                        if erro_sub:
+                            erros.append(f"[{modulo}] Falha ao acessar subpágina {url_sub}: {erro_sub}")
+
             # 3. Validar seções obrigatórias
             secoes = regra.get("pagina_principal", {}).get("secoes_obrigatorias", [])
             if secoes:
-                res_secoes = validar_secoes(html_pagina, url_pagina, secoes, modulo=modulo)
+                res_secoes = _validar_secoes_em_paginas(
+                    paginas_validacao,
+                    secoes,
+                    modulo=modulo,
+                )
                 resultados_modulo.extend(res_secoes)
 
             # 4. Validar data de atualização
@@ -366,10 +572,14 @@ def auditar_orgao(
                     ),
                     url=url_pagina or url,
                     modulo=modulo,
+                    )
                 )
-            )
 
         resultados_por_modulo[modulo] = resultados_modulo
+        for resultado in resultados_modulo:
+            evidencias_por_url[resultado.url].append(
+                f"[{resultado.modulo}] {resultado.descricao}: {resultado.status.value}"
+            )
 
     # Calcular pontuações
     pontuacoes = {
@@ -391,6 +601,9 @@ def auditar_orgao(
         "metodos_coleta": metodos_coleta,
         "modulos_ativos": modulos_ativos,
         "selecao_urls_modulos": selecao_urls_modulos,
+        "subpaginas_visitadas": subpaginas_visitadas,
+        "subpaginas_esperadas_nao_encontradas": subpaginas_esperadas_nao_encontradas,
+        "evidencias_por_url": dict(evidencias_por_url),
     }
 
 

@@ -20,6 +20,29 @@ pagina_principal:
     - "Doações, Comodatos, Brindes e Presentes"
     - "Programa de Integridade e Boas Práticas"
 
+subpaginas_obrigatorias_institucional:
+  - nome: "Competências e Atribuições"
+    aliases:
+      - "Competências e Atribuições"
+      - "Competencias e Atribuicoes"
+      - "Competências e atribuições"
+  - nome: "Organograma e Estrutura Administrativa"
+    aliases:
+      - "Organograma e Estrutura Administrativa"
+      - "Estrutura Administrativa"
+  - nome: "Lista de Servidores e Contatos"
+    aliases:
+      - "Lista de Servidores e Contatos"
+      - "Servidores e Contatos"
+  - nome: "Agenda da Autoridade"
+    aliases:
+      - "Agenda da Autoridade"
+      - "Agenda do Presidente"
+  - nome: "Agenda do Presidente"
+    aliases:
+      - "Agenda do Presidente"
+      - "Agenda da Autoridade"
+
 validacoes_gerais:
   exigir_data_atualizacao: true
   exigir_repositorio_anos_anteriores: true

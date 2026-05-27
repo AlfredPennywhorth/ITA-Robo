@@ -632,6 +632,19 @@ HTML_PARTICIPACAO_INTERNO = """
 </html>
 """
 
+HTML_INSTITUCIONAL_SUBPAGINAS = """
+<html>
+<body>
+  <h1>Institucional</h1>
+  <a href="/institucional/competencias">Competências e atribuições</a>
+  <a href="/institucional/estrutura">Estrutura Administrativa</a>
+  <a href="/institucional/servidores">Servidores e Contatos</a>
+  <a href="/institucional/agenda-presidente">Agenda do Presidente</a>
+  <a href="https://externo.exemplo.org/institucional/competencias">Competências e Atribuições</a>
+</body>
+</html>
+"""
+
 
 class TestAjustesConfiabilidade:
     """Testa os ajustes de confiabilidade para piloto controlado."""
@@ -782,3 +795,100 @@ class TestSelecaoUrlPrincipalModulo:
             "Participação Social",
         )
         assert selecao["url"] == "https://www.prefeitura.sp.gov.br/participacao-social"
+
+
+class TestSubpaginasObrigatoriasAcessoInformacao:
+    def test_descobre_links_internos_e_ignora_externo(self):
+        from app.reports.report_builder import _descobrir_subpaginas_obrigatorias
+
+        subpaginas_cfg = [
+            {"nome": "Competências e Atribuições", "aliases": ["Competências e atribuições"]},
+            {"nome": "Organograma e Estrutura Administrativa", "aliases": ["Estrutura Administrativa"]},
+            {"nome": "Lista de Servidores e Contatos", "aliases": ["Servidores e Contatos"]},
+            {"nome": "Agenda do Presidente", "aliases": ["Agenda do Presidente"]},
+        ]
+        descoberta = _descobrir_subpaginas_obrigatorias(
+            HTML_INSTITUCIONAL_SUBPAGINAS,
+            URL_BASE,
+            subpaginas_cfg,
+        )
+        urls = {item["url"] for item in descoberta["encontrados"]}
+        assert "https://www.prefeitura.sp.gov.br/institucional/competencias" in urls
+        assert "https://www.prefeitura.sp.gov.br/institucional/estrutura" in urls
+        assert "https://www.prefeitura.sp.gov.br/institucional/servidores" in urls
+        assert "https://www.prefeitura.sp.gov.br/institucional/agenda-presidente" in urls
+        assert all("externo.exemplo.org" not in url for url in urls)
+
+    def test_agenda_do_presidente_satisfaz_alias_da_autoridade(self):
+        from app.reports.report_builder import _descobrir_subpaginas_obrigatorias
+
+        subpaginas_cfg = [
+            {
+                "nome": "Agenda da Autoridade",
+                "aliases": ["Agenda da Autoridade", "Agenda do Presidente"],
+            }
+        ]
+        descoberta = _descobrir_subpaginas_obrigatorias(
+            HTML_INSTITUCIONAL_SUBPAGINAS,
+            URL_BASE,
+            subpaginas_cfg,
+        )
+        assert descoberta["encontrados"][0]["nome"] == "Agenda da Autoridade"
+        assert (
+            descoberta["encontrados"][0]["url"]
+            == "https://www.prefeitura.sp.gov.br/institucional/agenda-presidente"
+        )
+
+
+class TestColetaResiliente:
+    def test_falha_playwright_contexto_fechado_faz_fallback_requests(self, monkeypatch):
+        from app.reports import report_builder as rb
+
+        url_inicial = "https://www.prefeitura.sp.gov.br/orgaoteste"
+        url_modulo = "https://www.prefeitura.sp.gov.br/acesso-a-informacao"
+        html_inicial = (
+            "<html><body><nav><a href='/acesso-a-informacao'>Acesso à Informação</a></nav>"
+            "<p>conteudo conteudo conteudo conteudo conteudo conteudo conteudo conteudo "
+            "conteudo conteudo conteudo conteudo conteudo conteudo conteudo conteudo</p></body></html>"
+        )
+        html_modulo = "<html><body><h1>Acesso à Informação</h1></body></html>"
+        chamadas_url: dict[str, int] = {}
+
+        def fake_buscar_html(url):
+            chamadas_url[url] = chamadas_url.get(url, 0) + 1
+            if url == url_inicial:
+                return html_inicial, None
+            if url == url_modulo and chamadas_url[url] == 1:
+                return None, "erro requests inicial"
+            if url == url_modulo and chamadas_url[url] >= 2:
+                return html_modulo, None
+            return None, "url não simulada"
+
+        def fake_buscar_html_dinamico(url):
+            if url == url_modulo:
+                return None, f"Página inacessível (contexto Playwright fechado) ao acessar {url}"
+            return None, "playwright não deveria ser chamado para essa URL"
+
+        def fake_carregar_regra(_):
+            return {
+                "nome": "Acesso à Informação",
+                "pagina_inicial": {"botoes_obrigatorios": [{"texto": "Acesso à Informação", "obrigatorio": True}]},
+                "pagina_principal": {"secoes_obrigatorias": []},
+                "validacoes_gerais": {},
+                "subpaginas_obrigatorias_institucional": [],
+            }
+
+        monkeypatch.setattr(rb, "buscar_html", fake_buscar_html)
+        monkeypatch.setattr(rb, "buscar_html_dinamico", fake_buscar_html_dinamico)
+        monkeypatch.setattr(rb, "_carregar_regra", fake_carregar_regra)
+
+        auditoria = rb.auditar_orgao(
+            url=url_inicial,
+            nome_orgao="Órgão Teste",
+            ano_referencia=2026,
+            modulos_ativos=["acesso_informacao"],
+            usar_playwright=True,
+        )
+
+        assert auditoria["erros"] == []
+        assert auditoria["metodos_coleta"][url_modulo] == "requests (fallback pós-falha Playwright)"
