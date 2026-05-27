@@ -211,7 +211,7 @@ if pagina == "Avaliação Individual":
                 col_dl1, col_dl2 = st.columns(2)
 
                 if not df.empty:
-                    excel_bytes = exportar_excel(df, nome_orgao, int(ano))
+                    excel_bytes = exportar_excel(df, nome_orgao, int(ano), auditoria=auditoria)
                     html_str = exportar_html(df, auditoria)
                     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                     nome_base = nome_orgao.replace(" ", "_")[:20]
