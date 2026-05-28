@@ -50,7 +50,7 @@ class ResultadoCriterio:
         return self.status in (StatusValidacao.PARCIAL, StatusValidacao.NAO_VERIFICADO)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        dados = {
             "criterio_id": self.criterio_id,
             "modulo": self.modulo,
             "descricao": self.descricao,
@@ -60,6 +60,10 @@ class ResultadoCriterio:
             "url": self.url,
             "requer_revisao_humana": self.requer_revisao_humana,
         }
+        for chave, valor in self.detalhes.items():
+            if isinstance(valor, (str, int, float, bool)) or valor is None:
+                dados[chave] = valor
+        return dados
 
 
 def calcular_pontuacao_modulo(resultados: list[ResultadoCriterio]) -> float:

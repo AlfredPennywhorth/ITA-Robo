@@ -13,6 +13,12 @@ pagina_principal:
     - "Lista de Serviços"
     - "Lista de Equipamentos"
 
+subpaginas_detalhadas:
+  - nome: "Lista de Serviços"
+    aliases: ["Lista de Serviços", "Serviços"]
+  - nome: "Lista de Equipamentos"
+    aliases: ["Lista de Equipamentos", "Equipamentos"]
+
 validacoes:
   exigir_data_atualizacao: true
   exigir_texto_padrao_apresentacao: true
@@ -26,3 +32,45 @@ validacoes:
     - "www.planalto.gov.br"
   textos_padrao:
     - "Esta página apresenta os serviços públicos e equipamentos disponibilizados"
+
+subcriterios:
+  - id: quadro_apresentacao
+    secao: "Apresentação"
+    descricao: "Texto padrão e data atualizada"
+    textos_obrigatorios:
+      - nome: "Texto padrão da página"
+        termos:
+          - "esta página apresenta os serviços públicos e equipamentos disponibilizados"
+          - "esta pagina apresenta os servicos publicos e equipamentos disponibilizados"
+    data_exigida: true
+
+  - id: quadro_lista_servicos
+    secao: "Lista de Serviços"
+    descricao: "Lista de serviços ou frase de inexistência"
+    textos_obrigatorios:
+      - nome: "Serviços públicos"
+        termos: ["lista de serviços", "serviços públicos", "servicos publicos"]
+    frases_negativas_validas:
+      - "não há serviços públicos"
+      - "não existem serviços públicos"
+      - "não há serviços"
+    links_esperados:
+      - nome: "Canal SP156 quando houver serviço"
+        termos_texto: ["sp156", "central 156", "portal 156"]
+        termos_url: ["sp156", "156"]
+
+  - id: quadro_lista_equipamentos
+    secao: "Lista de Equipamentos"
+    descricao: "Lista de equipamentos ou frase de inexistência"
+    textos_obrigatorios:
+      - nome: "Equipamentos públicos"
+        termos: ["lista de equipamentos", "equipamentos públicos", "equipamentos publicos"]
+    frases_negativas_validas:
+      - "não há equipamentos públicos"
+      - "não existem equipamentos públicos"
+      - "não há equipamentos"
+
+  - id: quadro_arquivos_abertos
+    secao: "Quadro de Serviços"
+    descricao: "Formato aberto em downloads quando houver arquivo"
+    exigir_formato_aberto_quando_houver_download: true

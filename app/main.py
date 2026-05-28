@@ -201,8 +201,25 @@ if pagina == "Avaliação Individual":
                 # Tabela de critérios
                 if not df.empty:
                     st.subheader("Detalhamento por Critério")
+                    colunas_exibicao = [
+                        c
+                        for c in [
+                            "modulo",
+                            "secao",
+                            "subcriterio",
+                            "tipo_evidencia",
+                            "descricao",
+                            "status",
+                            "pontuacao",
+                            "pontuacao_script",
+                            "requer_revisao_humana",
+                            "evidencia",
+                            "url",
+                        ]
+                        if c in df.columns
+                    ]
                     st.dataframe(
-                        df[["modulo", "descricao", "status", "pontuacao", "evidencia", "url"]],
+                        df[colunas_exibicao],
                         use_container_width=True,
                     )
 

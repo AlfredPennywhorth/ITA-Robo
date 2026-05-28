@@ -25,10 +25,10 @@ subpaginas_obrigatorias_institucional:
     aliases:
       - "Competências e Atribuições"
       - "Competencias e Atribuicoes"
-      - "Competências e atribuições"
   - nome: "Organograma e Estrutura Administrativa"
     aliases:
       - "Organograma e Estrutura Administrativa"
+      - "Estrutura Organizacional"
       - "Estrutura Administrativa"
   - nome: "Lista de Servidores e Contatos"
     aliases:
@@ -38,10 +38,6 @@ subpaginas_obrigatorias_institucional:
     aliases:
       - "Agenda da Autoridade"
       - "Agenda do Presidente"
-  - nome: "Agenda do Presidente"
-    aliases:
-      - "Agenda do Presidente"
-      - "Agenda da Autoridade"
 
 validacoes_gerais:
   exigir_data_atualizacao: true
@@ -51,3 +47,162 @@ validacoes_gerais:
   dominio_legislacao_oficial:
     - "legislacao.prefeitura.sp.gov.br"
     - "www.planalto.gov.br"
+
+subcriterios:
+  - id: institucional_itens_basicos
+    secao: "Institucional"
+    descricao: "Competências, estrutura, contatos e atendimento"
+    textos_obrigatorios:
+      - nome: "Competências e atribuições"
+        termos: ["competências e atribuições", "competencias e atribuicoes"]
+      - nome: "Estrutura organizacional"
+        termos: ["estrutura organizacional", "estrutura administrativa", "organograma"]
+      - nome: "Telefone"
+        termos: ["telefone", "contato telefônico"]
+      - nome: "E-mail"
+        termos: ["e-mail", "email", "correio eletrônico"]
+      - nome: "Endereço"
+        termos: ["endereço", "logradouro", "sede"]
+      - nome: "Atendimento ao público"
+        termos: ["atendimento ao público", "atendimento ao publico", "horário de atendimento"]
+      - nome: "Lista de servidores"
+        termos: ["lista de servidores", "quadro de servidores"]
+    grupos_alternativos:
+      - nome: "Agenda da autoridade ou agenda do presidente"
+        opcoes: ["agenda da autoridade", "agenda do presidente"]
+    links_esperados:
+      - nome: "Agenda (pauta, horário, local e participantes quando houver)"
+        termos_texto: ["pauta", "horário", "local", "participantes"]
+
+  - id: acoes_programas
+    secao: "Ações e Programas"
+    descricao: "Itens de planejamento e execução"
+    textos_obrigatorios:
+      - nome: "Orçamento"
+        termos: ["orçamento", "orcamento"]
+      - nome: "Programa de metas"
+        termos: ["programa de metas"]
+      - nome: "Metas vinculadas"
+        termos: ["metas vinculadas", "metas relacionadas"]
+      - nome: "Agenda 2030"
+        termos: ["agenda 2030", "ods"]
+      - nome: "Plano de ação"
+        termos: ["plano de ação", "plano de acao"]
+
+  - id: faq_secao
+    secao: "Perguntas Frequentes"
+    descricao: "Seção/card e perguntas com respostas"
+    textos_obrigatorios:
+      - nome: "Seção ou card de perguntas frequentes"
+        termos: ["perguntas frequentes", "faq"]
+      - nome: "Perguntas e respostas"
+        termos: ["pergunta", "resposta"]
+    heuristica_minima:
+      regex: "\\?"
+      minimo: 3
+      apenas_heuristica: true
+
+  - id: classificadas_desclassificadas
+    secao: "Informações Classificadas e Desclassificadas"
+    descricao: "Classificação, desclassificação e inexistência"
+    textos_obrigatorios:
+      - nome: "Termos de classificação"
+        termos: ["classificação", "informações classificadas", "informacoes classificadas"]
+      - nome: "Desclassificação"
+        termos: ["desclassificação", "informações desclassificadas", "informacoes desclassificadas"]
+    frases_negativas_validas:
+      - "não há informações classificadas"
+      - "não existem informações classificadas"
+      - "não houve desclassificação"
+
+  - id: sic_canais
+    secao: "Serviço de Informação ao Cidadão"
+    descricao: "Canais de atendimento do SIC"
+    textos_obrigatorios:
+      - nome: "Pedido presencial"
+        termos: ["pedido presencial", "atendimento presencial"]
+      - nome: "Correspondência física"
+        termos: ["correspondência", "correspondencia", "endereço para correspondência"]
+      - nome: "Telefone"
+        termos: ["telefone"]
+      - nome: "Autoridade de monitoramento"
+        termos: ["autoridade de monitoramento"]
+    links_esperados:
+      - nome: "Canal e-SIC ou equivalente"
+        termos_texto: ["e-sic", "esic", "sic", "fale conosco"]
+        termos_url: ["sic", "esic", "ouvidoria", "fale-conosco"]
+
+  - id: auditorias_fontes
+    secao: "Auditorias"
+    descricao: "Auditorias internas e externas"
+    textos_obrigatorios:
+      - nome: "Auditorias internas"
+        termos: ["auditorias internas", "auditoria interna"]
+      - nome: "CGM"
+        termos: ["cgm", "controladoria geral do município"]
+      - nome: "Auditorias externas"
+        termos: ["auditorias externas", "auditoria externa"]
+      - nome: "TCM"
+        termos: ["tcm", "tribunal de contas do município"]
+
+  - id: compras_publicas
+    secao: "Compras Públicas"
+    descricao: "Contato e listas de contratação"
+    textos_obrigatorios:
+      - nome: "E-mail de compras públicas"
+        termos: ["e-mail", "email", "compras públicas"]
+      - nome: "Plano de contratação anual"
+        termos: ["plano de contratação anual", "pca"]
+      - nome: "Lista de compras públicas"
+        termos: ["lista de compras públicas", "compras públicas"]
+    exigir_formato_aberto_quando_houver_download: true
+
+  - id: contratos_administrativos
+    secao: "Contratos Administrativos"
+    descricao: "Lista de contratos administrativos"
+    textos_obrigatorios:
+      - nome: "Lista de contratos administrativos"
+        termos: ["lista de contratos administrativos", "contratos administrativos"]
+
+  - id: convenios_parcerias
+    secao: "Convênios e Parcerias"
+    descricao: "Instrumentos de parceria"
+    textos_obrigatorios:
+      - nome: "Convênios"
+        termos: ["convênios", "convenios"]
+      - nome: "Termos de cooperação técnica"
+        termos: ["termo de cooperação técnica", "termos de cooperação técnica"]
+      - nome: "Parcerias com terceiro setor"
+        termos: ["terceiro setor", "parcerias com terceiro setor"]
+      - nome: "Termos de colaboração"
+        termos: ["termo de colaboração", "termos de colaboração"]
+      - nome: "Termos de fomento"
+        termos: ["termo de fomento", "termos de fomento"]
+      - nome: "Acordos de cooperação"
+        termos: ["acordo de cooperação", "acordos de cooperação"]
+      - nome: "Contratos de gestão"
+        termos: ["contrato de gestão", "contratos de gestão"]
+
+  - id: doacoes_comodatos_brindes
+    secao: "Doações, Comodatos, Brindes e Presentes"
+    descricao: "Doações, comodatos e brindes"
+    textos_obrigatorios:
+      - nome: "Doações"
+        termos: ["doações", "doacoes"]
+      - nome: "Comodatos"
+        termos: ["comodatos", "comodato"]
+      - nome: "Brindes e presentes"
+        termos: ["brindes e presentes", "brindes", "presentes"]
+    frases_negativas_validas:
+      - "não houve doações"
+      - "não há comodatos"
+      - "não houve brindes"
+
+  - id: integridade_boas_praticas
+    secao: "Programa de Integridade e Boas Práticas"
+    descricao: "Programa de integridade e PIBP"
+    textos_obrigatorios:
+      - nome: "Programa de Integridade e Boas Práticas"
+        termos: ["programa de integridade e boas práticas", "programa de integridade"]
+      - nome: "PIBP"
+        termos: ["pibp"]
