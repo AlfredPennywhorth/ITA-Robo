@@ -772,6 +772,71 @@ HTML_INSTITUCIONAL_SUBPAGINAS = """
 </html>
 """
 
+HTML_ACESSO_INSTITUCIONAL_DETALHADO = """
+<html><body>
+  <h2>Institucional</h2>
+  <p>Competências e atribuições da secretaria.</p>
+  <p>Estrutura organizacional e organograma vigente.</p>
+  <p>Telefone: (11) 9999-9999 | E-mail: contato@prefeitura.sp.gov.br</p>
+  <p>Endereço: Rua Exemplo, 100 - Centro</p>
+  <p>Atendimento ao público: segunda a sexta, 9h às 17h</p>
+  <p>Lista de servidores disponível para consulta.</p>
+  <p>Agenda do Presidente com pauta, horário, local e participantes.</p>
+</body></html>
+"""
+
+HTML_FAQ_COM_PERGUNTAS = """
+<html><body>
+  <h2>Perguntas Frequentes</h2>
+  <p>Pergunta: Como solicitar informação?</p>
+  <p>Resposta: Pelo canal e-SIC.</p>
+  <p>Pergunta: Qual o prazo?</p>
+  <p>Resposta: Até 20 dias.</p>
+  <p>Pergunta: Existe atendimento presencial?</p>
+  <p>Resposta: Sim, conforme horário da unidade.</p>
+</body></html>
+"""
+
+HTML_PARTICIPACAO_BLOCOS = """
+<html><body>
+  <h2>Conferências</h2>
+  <p>Conferências agendadas para o semestre.</p>
+  <p>Conferências realizadas no exercício anterior.</p>
+</body></html>
+"""
+
+HTML_PARTICIPACAO_NEGATIVA = """
+<html><body>
+  <h2>Consultas Públicas</h2>
+  <p>Não há consulta pública agendada para o período vigente.</p>
+</body></html>
+"""
+
+HTML_QUADRO_SERVICOS_E_EQUIPAMENTOS = """
+<html><body>
+  <h2>Lista de Serviços</h2>
+  <ul><li>Serviço A</li></ul>
+  <a href="https://sp156.prefeitura.sp.gov.br">SP156</a>
+  <h2>Lista de Equipamentos</h2>
+  <ul><li>Equipamento B</li></ul>
+</body></html>
+"""
+
+HTML_QUADRO_SEM_EQUIPAMENTOS = """
+<html><body>
+  <h2>Lista de Equipamentos</h2>
+  <p>Não há equipamentos públicos vinculados a este órgão.</p>
+</body></html>
+"""
+
+HTML_ARQUIVOS_ABERTOS_VARIADOS = """
+<html><body>
+  <a href="/dados/base.csv">CSV</a>
+  <a href="/dados/planilha.ods">ODS</a>
+  <a href="/dados/texto.odt">ODT</a>
+</body></html>
+"""
+
 
 class TestAjustesConfiabilidade:
     """Testa os ajustes de confiabilidade para piloto controlado."""
@@ -1157,3 +1222,179 @@ class TestColetaResiliente:
 
         assert auditoria["erros"] == []
         assert auditoria["metodos_coleta"][url_modulo] == "requests (fallback pós-falha Playwright)"
+
+
+class TestSubcriteriosDetalhados:
+    def test_acesso_institucional_subcriterios(self):
+        from app.validators.base import StatusValidacao
+        from app.validators.subcriteria_validator import validar_subcriterios_paginas
+
+        subcriterios = [
+            {
+                "id": "institucional_itens_basicos",
+                "secao": "Institucional",
+                "descricao": "Competências, estrutura e contatos",
+                "textos_obrigatorios": [
+                    {"nome": "Competências e atribuições", "termos": ["competências e atribuições"]},
+                    {"nome": "Estrutura organizacional", "termos": ["estrutura organizacional"]},
+                    {"nome": "Telefone", "termos": ["telefone"]},
+                    {"nome": "E-mail", "termos": ["e-mail"]},
+                ],
+            }
+        ]
+        resultados = validar_subcriterios_paginas(
+            [{"url": URL_BASE, "html": HTML_ACESSO_INSTITUCIONAL_DETALHADO}],
+            subcriterios,
+            modulo="acesso_informacao",
+        )
+        assert resultados[0].status == StatusValidacao.CONFORME
+        assert resultados[0].detalhes["pontuacao_script"] == 2
+
+    def test_faq_com_perguntas_detectadas(self):
+        from app.validators.base import StatusValidacao
+        from app.validators.subcriteria_validator import validar_subcriterios_paginas
+
+        subcriterios = [
+            {
+                "id": "faq",
+                "secao": "Perguntas Frequentes",
+                "descricao": "FAQ com perguntas",
+                "textos_obrigatorios": [{"nome": "FAQ", "termos": ["perguntas frequentes"]}],
+                "heuristica_minima": {"regex": "\\?", "minimo": 3, "apenas_heuristica": True},
+            }
+        ]
+        resultados = validar_subcriterios_paginas(
+            [{"url": URL_BASE, "html": HTML_FAQ_COM_PERGUNTAS}],
+            subcriterios,
+            modulo="acesso_informacao",
+        )
+        assert resultados[0].status == StatusValidacao.CONFORME
+
+    def test_frase_negativa_valida(self):
+        from app.validators.base import StatusValidacao
+        from app.validators.subcriteria_validator import validar_subcriterios_paginas
+
+        subcriterios = [
+            {
+                "id": "consultas",
+                "secao": "Consultas Públicas",
+                "descricao": "Consultas públicas",
+                "textos_obrigatorios": [{"nome": "Bloco agendado", "termos": ["agendadas"]}],
+                "frases_negativas_validas": ["não há consulta pública"],
+            }
+        ]
+        resultados = validar_subcriterios_paginas(
+            [{"url": URL_BASE, "html": HTML_PARTICIPACAO_NEGATIVA}],
+            subcriterios,
+            modulo="participacao_social",
+        )
+        assert resultados[0].status == StatusValidacao.CONFORME
+        assert resultados[0].detalhes["frase_negativa_valida"] is True
+
+    def test_participacao_blocos_agendados_realizados(self):
+        from app.validators.base import StatusValidacao
+        from app.validators.subcriteria_validator import validar_subcriterios_paginas
+
+        subcriterios = [
+            {
+                "id": "conferencias",
+                "secao": "Conferências",
+                "descricao": "Blocos agendados e realizados",
+                "textos_obrigatorios": [
+                    {"nome": "Agendados", "termos": ["agendadas", "agendada"]},
+                    {"nome": "Realizados", "termos": ["realizadas", "realizada"]},
+                ],
+            }
+        ]
+        resultados = validar_subcriterios_paginas(
+            [{"url": URL_BASE, "html": HTML_PARTICIPACAO_BLOCOS}],
+            subcriterios,
+            modulo="participacao_social",
+        )
+        assert resultados[0].status == StatusValidacao.CONFORME
+
+    def test_quadro_servicos_e_equipamentos(self):
+        from app.validators.base import StatusValidacao
+        from app.validators.subcriteria_validator import validar_subcriterios_paginas
+
+        subcriterios = [
+            {
+                "id": "quadro_servicos",
+                "secao": "Lista de Serviços",
+                "descricao": "Serviços e equipamentos",
+                "textos_obrigatorios": [
+                    {"nome": "Serviços", "termos": ["lista de serviços"]},
+                    {"nome": "Equipamentos", "termos": ["lista de equipamentos"]},
+                ],
+            }
+        ]
+        resultados = validar_subcriterios_paginas(
+            [{"url": URL_BASE, "html": HTML_QUADRO_SERVICOS_E_EQUIPAMENTOS}],
+            subcriterios,
+            modulo="quadro_servicos",
+        )
+        assert resultados[0].status == StatusValidacao.CONFORME
+
+    def test_quadro_frase_nao_ha_equipamentos(self):
+        from app.validators.base import StatusValidacao
+        from app.validators.subcriteria_validator import validar_subcriterios_paginas
+
+        subcriterios = [
+            {
+                "id": "quadro_equipamentos",
+                "secao": "Lista de Equipamentos",
+                "descricao": "Equipamentos",
+                "textos_obrigatorios": [{"nome": "Lista de equipamentos", "termos": ["lista de equipamentos"]}],
+                "frases_negativas_validas": ["não há equipamentos públicos"],
+            }
+        ]
+        resultados = validar_subcriterios_paginas(
+            [{"url": URL_BASE, "html": HTML_QUADRO_SEM_EQUIPAMENTOS}],
+            subcriterios,
+            modulo="quadro_servicos",
+        )
+        assert resultados[0].status == StatusValidacao.CONFORME
+
+    def test_links_externos_nao_sao_seguidos_em_subpaginas_detalhadas(self):
+        from app.reports.report_builder import _descobrir_subpaginas_obrigatorias
+
+        html = """
+        <html><body>
+          <a href="https://externo.exemplo.org/participacao/conselhos">Conselhos e Órgãos Colegiados</a>
+          <a href="/participacao-social/conselhos">Conselhos e Órgãos Colegiados</a>
+        </body></html>
+        """
+        descoberta = _descobrir_subpaginas_obrigatorias(
+            html,
+            URL_BASE,
+            [{"nome": "Conselhos e Órgãos Colegiados", "aliases": ["Conselhos e Órgãos Colegiados"]}],
+        )
+        assert descoberta["encontrados"][0]["url"] == "https://www.prefeitura.sp.gov.br/participacao-social/conselhos"
+        assert all("externo.exemplo.org" not in item["url"] for item in descoberta["encontrados"])
+
+    def test_arquivos_csv_ods_odt_reconhecidos_formato_aberto(self):
+        from app.validators.base import StatusValidacao
+        from app.validators.file_format_validator import validar_formatos_arquivos
+
+        r = validar_formatos_arquivos(HTML_ARQUIVOS_ABERTOS_VARIADOS, URL_BASE)
+        assert r.status == StatusValidacao.CONFORME
+        assert ".csv" in r.evidencia.lower()
+
+    def test_apenas_pdf_nao_conforme_quando_exigido_formato_aberto(self):
+        from app.validators.base import StatusValidacao
+        from app.validators.subcriteria_validator import validar_subcriterios_paginas
+
+        subcriterios = [
+            {
+                "id": "arquivos_abertos",
+                "secao": "Quadro de Serviços",
+                "descricao": "Formato aberto obrigatório",
+                "exigir_formato_aberto_quando_houver_download": True,
+            }
+        ]
+        resultados = validar_subcriterios_paginas(
+            [{"url": URL_BASE, "html": HTML_COM_PDF_APENAS}],
+            subcriterios,
+            modulo="quadro_servicos",
+        )
+        assert resultados[0].status == StatusValidacao.NAO_CONFORME

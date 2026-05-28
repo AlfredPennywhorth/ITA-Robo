@@ -19,6 +19,20 @@ pagina_principal:
         - "Fundo Público"
         - "Fundos"
 
+subpaginas_detalhadas:
+  - nome: "Conselhos e Órgãos Colegiados"
+    aliases: ["Conselhos", "Órgãos Colegiados"]
+  - nome: "Conferências"
+    aliases: ["Conferências"]
+  - nome: "Audiências Públicas"
+    aliases: ["Audiências Públicas"]
+  - nome: "Consultas Públicas"
+    aliases: ["Consultas Públicas"]
+  - nome: "Eventos e Promoção da Cidadania"
+    aliases: ["Eventos", "Promoção da Cidadania"]
+  - nome: "Fundos Públicos"
+    aliases: ["Fundos Públicos", "Fundo Público", "Fundos"]
+
 validacoes_gerais:
   exigir_data_atualizacao: true
   exigir_repositorio_anos_anteriores: true
@@ -27,3 +41,97 @@ validacoes_gerais:
   dominio_legislacao_oficial:
     - "legislacao.prefeitura.sp.gov.br"
     - "www.planalto.gov.br"
+  textos_padrao:
+    - "Participação social é a atuação da sociedade na formulação, monitoramento e avaliação de políticas públicas."
+
+subcriterios:
+  - id: participacao_apresentacao
+    secao: "Participação Social"
+    descricao: "URL principal, data e texto padrão"
+    textos_obrigatorios:
+      - nome: "Texto padrão de apresentação"
+        termos:
+          - "participação social é a atuação da sociedade"
+          - "monitoramento e avaliação de políticas públicas"
+    data_exigida: true
+
+  - id: conselhos_orgaos
+    secao: "Conselhos e Órgãos Colegiados"
+    descricao: "Lista ou inexistência, composição, contato, calendário e atas"
+    textos_obrigatorios:
+      - nome: "Composição"
+        termos: ["composição", "composicao"]
+      - nome: "Contato"
+        termos: ["contato", "e-mail", "email", "telefone"]
+      - nome: "Calendário"
+        termos: ["calendário", "calendario"]
+      - nome: "Atas"
+        termos: ["ata", "atas"]
+    frases_negativas_validas:
+      - "não há conselho"
+      - "não existem conselhos"
+      - "não há órgão colegiado"
+
+  - id: conferencias
+    secao: "Conferências"
+    descricao: "Blocos agendados e realizados ou inexistência"
+    textos_obrigatorios:
+      - nome: "Bloco agendado"
+        termos: ["agendadas", "agendada", "agenda"]
+      - nome: "Bloco realizado"
+        termos: ["realizadas", "realizada", "realizados"]
+    frases_negativas_validas:
+      - "não há conferência"
+      - "não há conferências"
+      - "não houve conferência"
+
+  - id: audiencias_publicas
+    secao: "Audiências Públicas"
+    descricao: "Blocos agendados e realizados ou inexistência"
+    textos_obrigatorios:
+      - nome: "Bloco agendado"
+        termos: ["agendadas", "agendada", "agenda"]
+      - nome: "Bloco realizado"
+        termos: ["realizadas", "realizada", "realizados"]
+    frases_negativas_validas:
+      - "não há audiência pública"
+      - "não há audiências públicas"
+
+  - id: consultas_publicas
+    secao: "Consultas Públicas"
+    descricao: "Blocos agendados e realizados ou inexistência"
+    textos_obrigatorios:
+      - nome: "Bloco agendado"
+        termos: ["agendadas", "agendada", "agenda"]
+      - nome: "Bloco realizado"
+        termos: ["realizadas", "realizada", "realizados"]
+    frases_negativas_validas:
+      - "não há consulta pública"
+      - "não há consultas públicas"
+
+  - id: eventos_cidadania
+    secao: "Eventos e Promoção da Cidadania"
+    descricao: "Blocos agendados e realizados ou inexistência"
+    textos_obrigatorios:
+      - nome: "Bloco agendado"
+        termos: ["agendados", "agendadas", "agenda"]
+      - nome: "Bloco realizado"
+        termos: ["realizados", "realizadas", "realização"]
+    frases_negativas_validas:
+      - "não há eventos"
+      - "não houve eventos"
+
+  - id: fundos_publicos
+    secao: "Fundos Públicos"
+    descricao: "Lista de fundos, conselho gestor, contratos, convênios e balanço"
+    textos_obrigatorios:
+      - nome: "Lista de fundos"
+        termos: ["fundos públicos", "fundo público", "lista de fundos"]
+      - nome: "Conselho gestor"
+        termos: ["conselho gestor"]
+      - nome: "Contratos"
+        termos: ["contratos"]
+      - nome: "Convênios"
+        termos: ["convênios", "convenios"]
+      - nome: "Balanço financeiro"
+        termos: ["balanço financeiro", "balanco financeiro"]

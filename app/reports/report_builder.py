@@ -27,6 +27,7 @@ from app.validators.date_validator import validar_data_atualizacao
 from app.validators.file_format_validator import validar_formatos_arquivos
 from app.validators.link_validator import validar_links_quebrados, validar_legislacao_oficial
 from app.validators.text_validator import validar_texto_padrao
+from app.validators.subcriteria_validator import validar_subcriterios_paginas
 
 import os
 
@@ -331,6 +332,17 @@ def _validar_secoes_em_paginas(
     return resultados
 
 
+def _adicionar_pagina_se_nova(
+    paginas_validacao: list[dict[str, str]],
+    url: str,
+    html: str,
+) -> bool:
+    if any(p["url"] == url for p in paginas_validacao):
+        return False
+    paginas_validacao.append({"url": url, "html": html})
+    return True
+
+
 def _html_suficiente(html: str) -> bool:
     texto = BeautifulSoup(html, "lxml").get_text(separator=" ", strip=True)
     return len(texto) >= 120 and ("<a " in html.lower() or "<h" in html.lower())
@@ -612,7 +624,7 @@ def auditar_orgao(
 
                     html_card, erro_card = _buscar_e_rastrear(url_card)
                     if html_card:
-                        paginas_validacao.append({"url": url_card, "html": html_card})
+                        _adicionar_pagina_se_nova(paginas_validacao, url_card, html_card)
                         paginas_cards_por_secao[nome_secao] = {"url": url_card, "html": html_card}
                         urls_cards_visitadas.add(url_card)
                         html_cards_por_url[url_card] = html_card
@@ -663,7 +675,7 @@ def auditar_orgao(
                     url_sub = subpagina["url"]
                     html_sub, erro_sub = _buscar_e_rastrear(url_sub)
                     if html_sub:
-                        paginas_validacao.append({"url": url_sub, "html": html_sub})
+                        _adicionar_pagina_se_nova(paginas_validacao, url_sub, html_sub)
                         subpaginas_visitadas.append(
                             {
                                 "modulo": modulo,
@@ -704,6 +716,33 @@ def auditar_orgao(
                         )
                         if erro_sub:
                             erros.append(f"[{modulo}] Falha ao acessar subpágina {url_sub}: {erro_sub}")
+
+            subpaginas_detalhadas_cfg = regra.get("subpaginas_detalhadas", [])
+            if subpaginas_detalhadas_cfg:
+                descoberta_detalhada = _descobrir_subpaginas_obrigatorias(
+                    html_pagina,
+                    url_pagina,
+                    subpaginas_detalhadas_cfg,
+                )
+                for subpagina in descoberta_detalhada["encontrados"]:
+                    url_sub = subpagina["url"]
+                    html_sub, erro_sub = _buscar_e_rastrear(url_sub)
+                    if html_sub:
+                        _adicionar_pagina_se_nova(paginas_validacao, url_sub, html_sub)
+                        subpaginas_visitadas.append(
+                            {
+                                "modulo": modulo,
+                                "origem": "detalhada",
+                                "nome": subpagina["nome"],
+                                "url": url_sub,
+                                "status": StatusValidacao.CONFORME.value,
+                                "evidencia": "Subpágina detalhada acessada com sucesso.",
+                            }
+                        )
+                    elif erro_sub:
+                        erros.append(
+                            f"[{modulo}] Falha ao acessar subpágina detalhada {url_sub}: {erro_sub}"
+                        )
 
             # 3. Validar seções obrigatórias
             if secoes:
@@ -789,6 +828,16 @@ def auditar_orgao(
                     html_pagina, url_pagina, textos_padrao, modulo=modulo
                 )
                 resultados_modulo.extend(res_textos)
+
+            # 9. Validar subcritérios detalhados do checklist
+            subcriterios_cfg = regra.get("subcriterios", [])
+            if subcriterios_cfg:
+                res_subcriterios = validar_subcriterios_paginas(
+                    paginas_validacao,
+                    subcriterios_cfg,
+                    modulo=modulo,
+                )
+                resultados_modulo.extend(res_subcriterios)
         else:
             resultados_modulo.append(
                 ResultadoCriterio(
